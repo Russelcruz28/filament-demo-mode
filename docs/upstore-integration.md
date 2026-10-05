@@ -1,6 +1,6 @@
 # UPSTORE Integration
 
-A Laravel 12 / Filament 4 plugin that retains one installation-wide private SQLite
+A Laravel 12 / Filament 4 and 5 plugin that retains one installation-wide private SQLite
 sandbox. Production records are read when the sandbox starts. All subsequent
 demo database writes use that sandbox, including models omitted from the copy.
 

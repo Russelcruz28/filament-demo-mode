@@ -1,6 +1,6 @@
 # Filament Demo Mode
 
-A Laravel 12 / Filament 4 plugin for persistent SQLite demo sandboxes and a
+A Laravel 12 / Filament 4 and 5 plugin for persistent SQLite demo sandboxes and a
 separate role switcher. Select starting data, present workflows, exit, and
 restore the same sandbox later without expiry.
 
@@ -12,8 +12,11 @@ Composer VCS repository.
 
 ## Installation
 
-Requires PHP 8.2+, PDO SQLite, Laravel 12, Filament 4, an Eloquent authenticatable
+Requires PHP 8.2+, PDO SQLite, Laravel 12, Filament 4 or 5, an Eloquent authenticatable
 user and application migrations compatible with SQLite.
+
+Filament 4 uses Livewire 3; Filament 5 uses Livewire 4. The same plugin
+registration and configuration work with both versions.
 
 After publication:
 
@@ -153,4 +156,13 @@ composer validate --strict
 ```
 
 Standalone Orchestra Testbench tests do not depend on UPSTORE. CI targets PHP
-8.2, 8.3 and 8.4 with Laravel 12 / Filament 4. Other major versions are not claimed.
+8.2, 8.3 and 8.4 with Laravel 12 and both Filament 4 and 5.
+
+To test a specific Filament major locally:
+
+```sh
+composer update --with 'filament/filament:^4.0' --prefer-dist
+composer test
+composer update --with 'filament/filament:^5.0' --prefer-dist
+composer test
+```

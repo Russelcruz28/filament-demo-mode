@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Support Filament 4 / Livewire 3 and Filament 5 / Livewire 4.
+- Test both Filament majors in CI, including Livewire demo snapshot validation.
+
 ## 0.1.0 - 2026-10-05
 
 - Persistent SQLite sandbox, model selection and production-context isolation.

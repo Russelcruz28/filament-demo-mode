@@ -10,7 +10,7 @@ after the public repository and Packagist release are available.
   and restore without expiry for Filament panels.
 - Price: Free
 - License: MIT
-- Supported Filament version: 4
+- Supported Filament versions: 4 and 5
 - Supported Laravel version: 12
 - PHP: 8.2 or later with PDO SQLite
 - Category: Choose the portal's applicable panel or utility category.
