@@ -1,0 +1,22 @@
+{
+    "name": "russelcruz28/filament-demo-mode",
+    "description": "Persistent SQLite demo sandboxes, role switching, and production-data isolation for Filament",
+    "type": "library",
+    "keywords": ["laravel", "filament", "filament-plugin", "demo", "sandbox", "role-switching"],
+    "license": "MIT",
+    "homepage": "https://github.com/Russelcruz28/filament-demo-mode",
+    "support": {
+        "issues": "https://github.com/Russelcruz28/filament-demo-mode/issues",
+        "source": "https://github.com/Russelcruz28/filament-demo-mode"
+    },
+    "authors": [{ "name": "Russelcruz28", "homepage": "https://github.com/Russelcruz28" }],
+    "require": { "php": "^8.2", "ext-pdo_sqlite": "*", "laravel/framework": "^12.0", "filament/filament": "^4.0" },
+    "autoload": { "psr-4": { "DemoMode\\": "src/" } },
+    "autoload-dev": { "psr-4": { "DemoMode\\Tests\\": "tests/" } },
+    "require-dev": { "orchestra/testbench": "^10.0", "phpunit/phpunit": "^11.5", "laravel/pint": "^1.18", "spatie/laravel-permission": "^6.0" },
+    "suggest": { "spatie/laravel-permission": "Enables automatic role discovery and switching in non-tenant Filament panels" },
+    "scripts": { "test": "vendor/bin/phpunit", "lint": "vendor/bin/pint --test", "format": "vendor/bin/pint" },
+    "config": { "sort-packages": true },
+    "archive": { "exclude": ["/vendor", "/composer.lock", "/.phpunit.cache", "/.env", "/.DS_Store", "/tests", "/.github", "/phpunit.xml.dist", "/pint.json"] },
+    "extra": { "laravel": { "providers": ["DemoMode\\DemoModeServiceProvider"] } }
+}

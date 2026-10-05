@@ -1,0 +1,11 @@
+/tests export-ignore
+/.github export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore
+/phpunit.xml.dist export-ignore
+/pint.json export-ignore
+/vendor export-ignore
+/composer.lock export-ignore
+/.phpunit.cache export-ignore
+/.env export-ignore
+/.DS_Store export-ignore
