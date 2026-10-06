@@ -61,8 +61,8 @@ DemoModePlugin::make()
         // Create sandbox-only memberships required by your application.
     })
     ->rolesUsing(fn ($user) => [
-        ['id' => 'office-head', 'label' => 'Office Head',
-            'group' => 'Office', 'selected' => session('demo_role') === 'office-head'],
+        ['id' => 'sales-manager', 'label' => 'Sales Manager',
+            'group' => 'Sales', 'selected' => session('demo_role') === 'sales-manager'],
     ])
     ->switchRoleUsing(function ($user, string $id): string {
         session(['demo_role' => $id]);
@@ -76,15 +76,15 @@ DemoModePlugin::make()
 ```
 
 Submitted roles must exist in `rolesUsing()` before the switch callback runs.
-Callbacks must enforce application-specific office/tenant rules. Include custom
+Callbacks must enforce application-specific team/tenant rules. Include custom
 context keys in `session_keys` and supporting tables in `required_tables`.
 Tenant panels require an explicit integration; their policies cannot be inferred.
 
 Complex applications can implement `ApplicationAdapter` and `RoleSwitcher` in
 `DemoMode\Contracts`, then use `->adapter(YourAdapter::class)` or configure
 `adapter`. Optionally implement `RequiredTables` to discover dependency tables.
-UPSTORE-specific models and office policies remain in the host adapter, not in
-this package. See [UPSTORE integration](docs/upstore-integration.md).
+Application-specific models and policies remain in your adapter, not in this
+package.
 
 Use exactly one management panel. Register
 `DemoModePlugin::make()->management(false)` on other panels to retain middleware
@@ -97,7 +97,7 @@ without adding another resource or replacing management configuration.
 - `required_tables`: always-copy tables; user/auth tables and foreign-key parents
   are discovered automatically. Unselected tables start empty but stay writable.
 - `session_keys`: prefixes of context keys saved/restored across mode transitions.
-  Include application carts, role selections and office context where needed.
+  Include application carts, role selections and team context where needed.
 - `sandbox_config` / `sandbox_cache`: application-specific overrides and private
   cache markers, such as disabling an external event publisher.
 - `root`: private writable storage, optionally set using `DEMO_MODE_ROOT`.
@@ -144,7 +144,7 @@ composer lint
 composer validate --strict
 ```
 
-Standalone Orchestra Testbench tests do not depend on UPSTORE. CI targets PHP
+Standalone Orchestra Testbench tests do not depend on a host application. CI targets PHP
 8.2, 8.3 and 8.4 with Laravel 12 and both Filament 4 and 5.
 
 To test a specific Filament major locally:

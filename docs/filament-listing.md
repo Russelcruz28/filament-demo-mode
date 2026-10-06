@@ -8,11 +8,11 @@ is archived; see the [legacy-site notice](https://github.com/filamentphp/legacy-
 
 - [x] Public repository: https://github.com/Russelcruz28/filament-demo-mode
 - [x] Packagist package: https://packagist.org/packages/russelcruz28/filament-demo-mode
-- [ ] Packagist lists the latest tag (`v0.1.1`, Filament 5 support). If it does not,
+- [x] Packagist lists the latest tag (`v0.1.1`, Filament 5 support). If it does not,
       click **Update** on the Packagist package page and enable the GitHub hook
       so future tags sync automatically.
 - [ ] Clean install verified in a fresh Laravel 12 app on Filament 4 and on Filament 5.
-- [ ] Thumbnail prepared (see below).
+- [x] Thumbnail prepared: `art/thumbnail.jpg` (see below).
 - [ ] Author access requested and approved in the portal.
 
 ## Listing Fields
@@ -20,25 +20,31 @@ is archived; see the [legacy-site notice](https://github.com/filamentphp/legacy-
 | Field | Value |
 | --- | --- |
 | Name | Demo Mode |
-| Slug | `russelcruz28-demo-mode` |
-| Description | Persistent SQLite demo sandboxes with model selection, role switching, and restore without expiry for Filament panels. |
-| Categories | Panel Builder, Developer Tool, Panel Authorization, Spatie |
+| Slug | `russel-cruz-demo-mode` (portal prefixes `russel-cruz-`; enter `demo-mode`) |
+| Description | Present your Filament panel on a persistent SQLite sandbox with model selection, role switching, and restore, without touching production data. |
+| Categories | Panels, Developer Tool, Panel Authorization, Spatie Integration |
 | GitHub repository | `Russelcruz28/filament-demo-mode` |
+| Composer package | `russelcruz28/filament-demo-mode` |
 | Documentation URL | https://raw.githubusercontent.com/Russelcruz28/filament-demo-mode/main/README.md |
 | Filament versions | 4, 5 |
 | Dark theme | No (the standalone role picker uses a light theme) |
 | Translations | No (interface strings are English only) |
-| Price | Free (MIT) |
+| Price | Free (leave Pricing empty) |
 
 Requirements to mention where the portal allows: PHP 8.2+, PDO SQLite, Laravel 12,
 host migrations compatible with SQLite.
 
 ## Thumbnail
 
-- 2560 × 1440 px (16:9), JPG.
-- Capture from a synthetic demo app only; never show production data.
-- Suggested shot: the **Demo Mode** resource with the model selection visible and
-  the demo banner active, or the role picker beside it.
+Upload `art/thumbnail.jpg` (2560 × 1440 px, 16:9, JPG). It is rendered from
+`art/thumbnail.html` using synthetic data only. To regenerate after edits:
+
+```sh
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+  --hide-scrollbars --window-size=1280,720 --force-device-scale-factor=2 \
+  --screenshot=/tmp/thumbnail.png "file://$PWD/art/thumbnail.html"
+sips -s format jpeg -s formatOptions 92 /tmp/thumbnail.png --out art/thumbnail.jpg
+```
 
 ## Description
 

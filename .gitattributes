@@ -9,3 +9,4 @@
 /.phpunit.cache export-ignore
 /.env export-ignore
 /.DS_Store export-ignore
+/art export-ignore
