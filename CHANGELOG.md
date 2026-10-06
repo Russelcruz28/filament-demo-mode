@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 - 2026-10-05
 
 - Support Filament 4 / Livewire 3 and Filament 5 / Livewire 4.
 - Test both Filament majors in CI, including Livewire demo snapshot validation.

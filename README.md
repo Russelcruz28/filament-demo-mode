@@ -4,11 +4,9 @@ A Laravel 12 / Filament 4 and 5 plugin for persistent SQLite demo sandboxes and 
 separate role switcher. Select starting data, present workflows, exit, and
 restore the same sandbox later without expiry.
 
-Package: `russelcruz28/filament-demo-mode`. See the
-[GitHub releases](https://github.com/Russelcruz28/filament-demo-mode/releases)
-and [publishing guide](PUBLISHING.md). Packagist indexing is required for the
-standard Composer command below; until indexed, add the GitHub repository as a
-Composer VCS repository.
+[![Packagist Version](https://img.shields.io/packagist/v/russelcruz28/filament-demo-mode)](https://packagist.org/packages/russelcruz28/filament-demo-mode)
+[![Tests](https://github.com/Russelcruz28/filament-demo-mode/actions/workflows/tests.yml/badge.svg)](https://github.com/Russelcruz28/filament-demo-mode/actions/workflows/tests.yml)
+[![License](https://img.shields.io/packagist/l/russelcruz28/filament-demo-mode)](LICENSE)
 
 ## Installation
 
@@ -18,8 +16,6 @@ user and application migrations compatible with SQLite.
 Filament 4 uses Livewire 3; Filament 5 uses Livewire 4. The same plugin
 registration and configuration work with both versions.
 
-After publication:
-
 ```sh
 composer require russelcruz28/filament-demo-mode:^0.1
 php artisan demo-mode:install --migrate
@@ -28,13 +24,6 @@ php artisan demo-mode:install --migrate
 The provider is auto-discovered. Installation publishes configuration without
 overwriting an existing file. `--migrate` runs only the package settings migration;
 omit it to manage migrations through your normal deployment process.
-
-Before Packagist indexing, use:
-
-```sh
-composer config repositories.filament-demo-mode vcs https://github.com/Russelcruz28/filament-demo-mode
-composer require russelcruz28/filament-demo-mode:^0.1
-```
 
 Register on your management panel:
 
