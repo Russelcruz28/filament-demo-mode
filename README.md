@@ -1,5 +1,11 @@
 # Filament Demo Mode
 
+<div class="filament-hidden">
+
+![Filament Demo Mode](https://raw.githubusercontent.com/Russelcruz28/filament-demo-mode/main/art/thumbnail.jpg)
+
+</div>
+
 A Laravel 12 / Filament 4 and 5 plugin for persistent SQLite demo sandboxes and a
 separate role switcher. Select starting data, present workflows, exit, and
 restore the same sandbox later without expiry.
