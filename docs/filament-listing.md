@@ -11,7 +11,7 @@ is archived; see the [legacy-site notice](https://github.com/filamentphp/legacy-
 - [x] Packagist lists the latest tag (`v0.1.1`, Filament 5 support). If it does not,
       click **Update** on the Packagist package page and enable the GitHub hook
       so future tags sync automatically.
-- [ ] Clean install verified in a fresh Laravel 12 app on Filament 4 and on Filament 5.
+- [ ] Clean install verified in a fresh Laravel 12 and 13 app on Filament 4 and on Filament 5.
 - [x] Thumbnail prepared: `art/thumbnail.jpg` (see below).
 - [ ] Author access requested and approved in the portal.
 
@@ -31,7 +31,7 @@ is archived; see the [legacy-site notice](https://github.com/filamentphp/legacy-
 | Translations | No (interface strings are English only) |
 | Price | Free (leave Pricing empty) |
 
-Requirements to mention where the portal allows: PHP 8.2+, PDO SQLite, Laravel 12,
+Requirements to mention where the portal allows: PHP 8.2+, PDO SQLite, Laravel 12 or 13,
 host migrations compatible with SQLite.
 
 ## Thumbnail

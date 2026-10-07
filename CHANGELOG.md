@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Support Laravel 13 (Orchestra Testbench 11) alongside Laravel 12.
+- CI: test the Laravel 12/13 and Filament 4/5 matrix, run `composer audit`,
+  pin GitHub Actions to commit SHAs and restrict the token to read-only.
+- Add Dependabot for Composer and GitHub Actions with a 7-day cooldown.
+
 ## 0.1.1 - 2026-10-05
 
 - Support Filament 4 / Livewire 3 and Filament 5 / Livewire 4.

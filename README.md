@@ -6,7 +6,7 @@
 
 </div>
 
-A Laravel 12 / Filament 4 and 5 plugin for persistent SQLite demo sandboxes and a
+A Laravel 12 and 13 / Filament 4 and 5 plugin for persistent SQLite demo sandboxes and a
 separate role switcher. Select starting data, present workflows, exit, and
 restore the same sandbox later without expiry.
 
@@ -16,7 +16,7 @@ restore the same sandbox later without expiry.
 
 ## Installation
 
-Requires PHP 8.2+, PDO SQLite, Laravel 12, Filament 4 or 5, an Eloquent authenticatable
+Requires PHP 8.2+ (8.3+ for Laravel 13), PDO SQLite, Laravel 12 or 13, Filament 4 or 5, an Eloquent authenticatable
 user and application migrations compatible with SQLite.
 
 Filament 4 uses Livewire 3; Filament 5 uses Livewire 4. The same plugin
@@ -151,7 +151,7 @@ composer validate --strict
 ```
 
 Standalone Orchestra Testbench tests do not depend on a host application. CI targets PHP
-8.2, 8.3 and 8.4 with Laravel 12 and both Filament 4 and 5.
+8.2, 8.3 and 8.4 with Laravel 12 and 13 and both Filament 4 and 5.
 
 To test a specific Filament major locally:
 
