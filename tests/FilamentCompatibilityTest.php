@@ -91,4 +91,25 @@ class FilamentCompatibilityTest extends TestCase
         $this->assertStringContainsString('Preparing demo', $modal);
         $this->assertStringContainsString(route('demo-mode.provisioning.step'), $modal);
     }
+
+    public function test_saved_models_that_are_no_longer_offered_are_dropped(): void
+    {
+        $setting = DemoSetting::create(['models' => [Widget::class, 'App\\Models\\RemovedModel']]);
+
+        Livewire::test(EditDemoSetting::class, ['record' => $setting->getRouteKey()])
+            ->assertSchemaStateSet(['models' => [Widget::class]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame([Widget::class], $setting->fresh()->models);
+    }
+
+    public function test_start_demo_skips_saved_models_that_are_no_longer_offered(): void
+    {
+        DemoSetting::create(['models' => [Widget::class, 'App\\Models\\RemovedModel']]);
+
+        app(DemoManager::class)->begin();
+
+        $this->assertNotNull(app(DemoManager::class)->provisioning());
+    }
 }

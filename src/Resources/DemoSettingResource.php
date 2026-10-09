@@ -60,6 +60,10 @@ class DemoSettingResource extends Resource
         return $schema->components([
             CheckboxList::make('models')->label('Copy starting data from')
                 ->options(fn () => app(DemoManager::class)->modelOptions())
+                // Drop saved models that are no longer offered (e.g. their table was excluded) so the form still saves.
+                ->afterStateHydrated(fn (CheckboxList $component, ?array $state) => $component->state(
+                    array_values(array_intersect($state ?? [], array_keys(app(DemoManager::class)->modelOptions())))
+                ))
                 ->searchable()->bulkToggleable()->columns(3)->columnSpanFull(),
         ]);
     }

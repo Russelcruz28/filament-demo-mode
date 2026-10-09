@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6 - 2026-10-09
+
+- Saved model selections that are no longer offered (for example after their
+  table is added to `excluded_tables`) are dropped instead of failing form
+  validation with "The selected copy starting data from is invalid" and
+  blocking Start Demo.
+
 ## 0.1.5 - 2026-10-09
 
 - Start/Reset shows provisioning progress in a modal on the current panel page

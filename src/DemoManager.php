@@ -336,17 +336,15 @@ class DemoManager
 
     private function sandboxTables(Connection $source, Model $sourceUser): array
     {
-        $models = DemoSetting::query()->first()?->models ?? array_keys($this->modelOptions());
         $allowed = $this->modelOptions();
+        // Saved models that are no longer offered (e.g. their table was excluded) are skipped.
+        $models = array_intersect(DemoSetting::query()->first()?->models ?? array_keys($allowed), array_keys($allowed));
         $tables = [...config('demo-mode.required_tables'), $sourceUser->getTable()];
         $adapter = app(ApplicationAdapter::class);
         if ($adapter instanceof RequiredTables) {
             $tables = [...$tables, ...$adapter->requiredTables($sourceUser)];
         }
         foreach ($models as $model) {
-            if (! isset($allowed[$model])) {
-                throw new \InvalidArgumentException('An unavailable model was selected for demo mode.');
-            }
             $tables[] = (new $model)->getTable();
         }
         // Copy selected models' many-to-many links when both endpoints are included.
