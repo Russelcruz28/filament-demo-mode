@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5 - 2026-10-09
+
+- Start/Reset shows provisioning progress in a modal on the current panel page
+  instead of a separate page. `/demo-mode/provisioning` now redirects to the
+  panel, where the modal resumes any pending copy.
+
 ## 0.1.4 - 2026-10-09
 
 - Stream rows while copying demo data so tables with wide rows (JSON, long

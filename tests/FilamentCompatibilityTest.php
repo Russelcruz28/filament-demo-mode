@@ -4,6 +4,7 @@ namespace DemoMode\Tests;
 
 use BladeUI\Heroicons\BladeHeroiconsServiceProvider;
 use BladeUI\Icons\BladeIconsServiceProvider;
+use DemoMode\DemoManager;
 use DemoMode\DemoModeOptions;
 use DemoMode\Models\DemoSetting;
 use DemoMode\Resources\DemoSettingResource;
@@ -75,5 +76,19 @@ class FilamentCompatibilityTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertSame([], $setting->fresh()->models);
+    }
+
+    public function test_start_demo_shows_the_provisioning_modal(): void
+    {
+        $this->assertSame('', trim(view('demo-mode::provisioning-modal')->render()));
+
+        Livewire::test(ListDemoSettings::class)
+            ->callAction('startDemo')
+            ->assertRedirect(ListDemoSettings::getUrl());
+
+        $modal = view('demo-mode::provisioning-modal')->render();
+        $this->assertNotNull(app(DemoManager::class)->provisioning());
+        $this->assertStringContainsString('Preparing demo', $modal);
+        $this->assertStringContainsString(route('demo-mode.provisioning.step'), $modal);
     }
 }

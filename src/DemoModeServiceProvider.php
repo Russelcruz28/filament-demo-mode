@@ -109,17 +109,12 @@ class DemoModeServiceProvider extends ServiceProvider
                     && (string) auth()->id() === (string) $state['owner'], 403);
                 app(DemoManager::class)->begin();
 
-                return redirect()->route('demo-mode.provisioning');
+                // The provisioning modal on the previous page picks up the new demo.
+                return redirect()->back();
             })->name('demo-mode.reset');
-            Route::get('/demo-mode/provisioning', function () {
-                $progress = app(DemoManager::class)->provisioning();
-                $destination = app(ApplicationAdapter::class)->destination();
-                if ($progress === null) {
-                    return redirect($destination);
-                }
-
-                return view('demo-mode::provisioning', ['progress' => $progress, 'back' => $destination]);
-            })->name('demo-mode.provisioning');
+            // Progress is shown in a modal on panel pages; this URL remains for existing links.
+            Route::get('/demo-mode/provisioning', fn () => redirect(app(ApplicationAdapter::class)->destination()))
+                ->name('demo-mode.provisioning');
             Route::post('/demo-mode/provisioning', function () {
                 try {
                     return response()->json(app(DemoManager::class)->advance());
@@ -144,6 +139,10 @@ class DemoModeServiceProvider extends ServiceProvider
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_START,
             fn () => view('demo-mode::banner'),
+        );
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn () => view('demo-mode::provisioning-modal'),
         );
     }
 }

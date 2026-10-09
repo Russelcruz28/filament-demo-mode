@@ -95,7 +95,7 @@ class ProvisioningTest extends TestCase
         $this->createWidgets(3);
         app(DemoManager::class)->begin();
 
-        $this->get(route('demo-mode.provisioning'))->assertOk()->assertSee('Preparing demo');
+        $this->get(route('demo-mode.provisioning'))->assertRedirect();
         $response = null;
         for ($step = 0; $step < 50; $step++) {
             $response = $this->postJson(route('demo-mode.provisioning.step'))->assertOk();

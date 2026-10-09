@@ -44,7 +44,7 @@ class ListDemoSettings extends ListRecords
 
                         return;
                     }
-                    $this->redirect(route('demo-mode.provisioning'));
+                    $this->redirect(static::getUrl());
                 }),
         ];
     }

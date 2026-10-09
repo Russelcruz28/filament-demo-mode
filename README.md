@@ -120,7 +120,8 @@ logout or browser-session loss. There is no expiry or scheduled cleanup.
 Successful Start/Reset replaces the saved sandbox, including copies used by
 other browsers. Failed provisioning preserves the previous copy.
 
-Start/Reset opens a progress page that copies tables in resumable batches, one
+Start/Reset shows a progress modal on the current panel page that copies tables in
+resumable batches, one
 short request at a time, so large datasets do not hit request timeouts. Presenters
 can cancel while copying; cancelled or failed copies are discarded.
 
