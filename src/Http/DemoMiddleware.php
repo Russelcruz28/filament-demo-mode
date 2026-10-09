@@ -31,7 +31,7 @@ class DemoMiddleware
             return redirect($adapter->destination());
         }
         $runtime = app(SandboxRuntime::class);
-        if ($request->routeIs('demo-mode.exit', 'demo-mode.reset')) {
+        if ($request->routeIs('demo-mode.exit', 'demo-mode.reset', 'demo-mode.provisioning', 'demo-mode.provisioning.*')) {
             return $next($request);
         }
         try {

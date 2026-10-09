@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 - 2026-10-09
+
+- Start/Reset now shows a progress page and copies data in chunks across short
+  requests, so large datasets no longer hit request timeouts. Tune with
+  `provisioning.chunk_size` and `provisioning.step_seconds`. The copy can be
+  cancelled and failures keep the previously saved demo.
+
+## 0.1.2 - 2026-10-07
 
 - Support Laravel 13 (Orchestra Testbench 11) alongside Laravel 12.
 - CI: test the Laravel 12/13 and Filament 4/5 matrix, run `composer audit`,

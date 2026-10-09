@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class DemoModeServiceProvider extends ServiceProvider
 {
@@ -106,10 +107,38 @@ class DemoModeServiceProvider extends ServiceProvider
                 $state = session('demo_mode');
                 abort_unless($state && app(DemoManager::class)->canManage()
                     && (string) auth()->id() === (string) $state['owner'], 403);
-                app(DemoManager::class)->start();
+                app(DemoManager::class)->begin();
 
-                return redirect()->route('demo-mode.roles');
+                return redirect()->route('demo-mode.provisioning');
             })->name('demo-mode.reset');
+            Route::get('/demo-mode/provisioning', function () {
+                $progress = app(DemoManager::class)->provisioning();
+                $destination = app(ApplicationAdapter::class)->destination();
+                if ($progress === null) {
+                    return redirect($destination);
+                }
+
+                return view('demo-mode::provisioning', ['progress' => $progress, 'back' => $destination]);
+            })->name('demo-mode.provisioning');
+            Route::post('/demo-mode/provisioning', function () {
+                try {
+                    return response()->json(app(DemoManager::class)->advance());
+                } catch (HttpExceptionInterface $exception) {
+                    throw $exception;
+                } catch (\Throwable $exception) {
+                    report($exception);
+
+                    return response()->json(['status' => 'failed', 'message' => $exception instanceof ProvisioningFailed
+                        ? $exception->getMessage()
+                        : 'The demo could not be prepared. Check the selected models and server logs, then try again.',
+                    ], 422);
+                }
+            })->name('demo-mode.provisioning.step');
+            Route::post('/demo-mode/provisioning/cancel', function () {
+                app(DemoManager::class)->cancel();
+
+                return redirect(app(ApplicationAdapter::class)->destination());
+            })->name('demo-mode.provisioning.cancel');
         });
 
         FilamentView::registerRenderHook(

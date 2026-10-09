@@ -17,4 +17,9 @@ return [
     'session_keys' => ['demo_role', 'password_hash_'],
     'sandbox_config' => [],
     'sandbox_cache' => [],
+    // Large tables are copied in chunks across short requests to avoid timeouts.
+    'provisioning' => [
+        'chunk_size' => 1000,
+        'step_seconds' => 5,
+    ],
 ];

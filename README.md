@@ -108,6 +108,9 @@ without adding another resource or replacing management configuration.
   cache markers, such as disabling an external event publisher.
 - `root`: private writable storage, optionally set using `DEMO_MODE_ROOT`.
 - `enabled`: disable starting/restoring without deleting the saved database.
+- `provisioning.chunk_size` / `provisioning.step_seconds`: rows copied per batch
+  and time spent per progress request (defaults 1000 rows, 5 seconds). Keep the
+  step well below your PHP and proxy timeouts.
 
 ## Persistence
 
@@ -116,6 +119,10 @@ uploads and context. Restore requires the same authorized owner and works after
 logout or browser-session loss. There is no expiry or scheduled cleanup.
 Successful Start/Reset replaces the saved sandbox, including copies used by
 other browsers. Failed provisioning preserves the previous copy.
+
+Start/Reset opens a progress page that copies tables in resumable batches, one
+short request at a time, so large datasets do not hit request timeouts. Presenters
+can cancel while copying; cancelled or failed copies are discarded.
 
 Data lives in `<root>/<uuid>/database.sqlite`. Private `current.json` metadata
 identifies the owner and saved context. Never expose this directory publicly.
@@ -136,8 +143,9 @@ external SDKs, direct file calls, SQL dialect-specific queries, cached service
 instances, non-web APIs and application policies need explicit review. Long-lived
 workers such as Octane have not been validated. See [Security](SECURITY.md).
 Copied data is not anonymized. Production attachments are not copied. Workflows
-requiring external services or queued jobs need sandbox replacements. Startup
-is synchronous, so select limited datasets for large applications.
+requiring external services or queued jobs need sandbox replacements. Copying
+large datasets still takes time and disk space, so select only the models a demo
+needs.
 
 ## Development
 

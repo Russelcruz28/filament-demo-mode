@@ -5,6 +5,7 @@ namespace DemoMode;
 use DemoMode\Contracts\ApplicationAdapter;
 use DemoMode\Contracts\RequiredTables;
 use DemoMode\Models\DemoSetting;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Facades\Artisan;
@@ -135,10 +136,73 @@ class DemoManager
         ]]);
     }
 
+    /**
+     * Provision a new sandbox in one call. Web requests use begin() and advance() to avoid timeouts.
+     */
     public function start(): void
     {
+        $this->begin();
+        while ($this->advance()['status'] !== 'complete') {
+            // Each step copies one time-boxed batch.
+        }
+    }
+
+    public function begin(): void
+    {
         abort_unless($this->canManage(), 403);
-        $this->withStorageLock(fn () => $this->provision());
+        $this->withStorageLock(function (): void {
+            if (is_string($pending = session('demo_mode_provisioning'))) {
+                $this->discardProvisioning($pending);
+            }
+            $sourceUser = Auth::user();
+            if (! $sourceUser instanceof Model) {
+                throw new \LogicException('Demo Mode requires an Eloquent authenticatable user model.');
+            }
+            $source = DB::connection();
+            $plan = app(SandboxCopier::class)->plan($source, $this->sandboxTables($source, $sourceUser));
+            $token = (string) Str::uuid();
+            File::ensureDirectoryExists($this->directory($token), 0700);
+            File::put($this->directory($token).'/database.sqlite', '');
+            $this->writeProvisioning($token, [
+                'owner' => Auth::id(), 'source' => $source->getName(),
+                'phase' => 'migrate', 'index' => 0, 'tables' => $plan,
+            ]);
+            session(['demo_mode_provisioning' => $token]);
+        });
+    }
+
+    public function provisioning(): ?array
+    {
+        $token = session('demo_mode_provisioning');
+        if (! is_string($token) || ! Str::isUuid($token)) {
+            return null;
+        }
+        $state = $this->readProvisioning($token);
+
+        return $state === null ? null : app(SandboxCopier::class)->progress($state);
+    }
+
+    /**
+     * Run provisioning work for up to the configured step time and report progress.
+     */
+    public function advance(): array
+    {
+        $token = session('demo_mode_provisioning');
+        abort_unless(is_string($token) && Str::isUuid($token), 404);
+        abort_unless($this->canManage(), 403);
+        try {
+            return $this->withStorageLock(fn (): array => $this->advanceLocked($token));
+        } catch (\Throwable $exception) {
+            $this->withStorageLock(fn () => $this->discardProvisioning($token));
+            throw $exception;
+        }
+    }
+
+    public function cancel(): void
+    {
+        if (is_string($token = session('demo_mode_provisioning'))) {
+            $this->withStorageLock(fn () => $this->discardProvisioning($token));
+        }
     }
 
     public function retainOnly(string $token): int
@@ -184,16 +248,94 @@ class DemoManager
         return $count;
     }
 
-    private function provision(): void
+    private function advanceLocked(string $token): array
     {
-        $sourceName = DB::getDefaultConnection();
-        $source = DB::connection($sourceName);
-        $userId = Auth::id();
-        $sourceUser = Auth::user();
-        if (! $sourceUser instanceof Model) {
-            throw new \LogicException('Demo Mode requires an Eloquent authenticatable user model.');
+        $state = $this->readProvisioning($token)
+            ?? throw new ProvisioningFailed('This demo was cancelled or replaced by another demo. Start it again.');
+        abort_unless((string) $state['owner'] === (string) Auth::id(), 403);
+        $copier = app(SandboxCopier::class);
+        $source = DB::connection($state['source']);
+        $deadline = microtime(true) + max(0, (float) config('demo-mode.provisioning.step_seconds', 5));
+        $this->configure($token);
+        do {
+            $state = match ($state['phase']) {
+                'migrate' => $this->migrateSandbox($token, $state),
+                'copy' => $copier->copyChunk($source, DB::connection('demo'), $state),
+                'verify' => $this->verifySandbox($state),
+            };
+            $this->writeProvisioning($token, $state);
+        } while ($state['phase'] !== 'ready' && microtime(true) < $deadline);
+        if ($state['phase'] !== 'ready') {
+            return $copier->progress($state);
         }
-        $userClass = $sourceUser::class;
+        $this->activate($token);
+
+        return ['status' => 'complete', 'percent' => 100, 'message' => 'Demo ready', 'redirect' => route('demo-mode.roles')];
+    }
+
+    private function migrateSandbox(string $token, array $state): array
+    {
+        $runtime = app(SandboxRuntime::class);
+        try {
+            $runtime->enter($token);
+            if (Artisan::call('migrate', ['--database' => 'demo', '--force' => true]) !== 0) {
+                throw new \RuntimeException('Demo schema creation failed.');
+            }
+        } finally {
+            $runtime->leave();
+        }
+        // Migrations can insert defaults. The sandbox must match the selected source data.
+        $demo = DB::connection('demo');
+        $demo->getSchemaBuilder()->withoutForeignKeyConstraints(fn () => $demo->transaction(function () use ($demo): void {
+            foreach ($demo->getSchemaBuilder()->getTableListing(schemaQualified: false) as $table) {
+                if ($table !== 'migrations') {
+                    $demo->table($table)->delete();
+                }
+            }
+        }));
+
+        return [...$state, 'phase' => 'copy'];
+    }
+
+    private function verifySandbox(array $state): array
+    {
+        if (DB::connection('demo')->select('PRAGMA foreign_key_check') !== []) {
+            throw new ProvisioningFailed('Demo data has missing relationships. Select the related models and try again.');
+        }
+
+        return [...$state, 'phase' => 'ready'];
+    }
+
+    private function activate(string $token): void
+    {
+        $userId = Auth::id();
+        $userClass = Auth::user()::class;
+        $runtime = app(SandboxRuntime::class);
+        try {
+            $runtime->enter($token);
+            $demoUser = $userClass::on('demo')->findOrFail($userId);
+            app(ApplicationAdapter::class)->prepare($demoUser);
+            $originalSession = session('demo_mode.original_session', $this->contextSession());
+            foreach (array_keys($this->contextSession()) as $key) {
+                session()->forget($key);
+            }
+            session(['demo_mode' => ['token' => $token, 'owner' => $userId,
+                'original_session' => $originalSession,
+            ]]);
+            session()->forget(['demo_mode_saved', 'demo_mode_provisioning']);
+            app(ApplicationAdapter::class)->clearContext();
+            session()->regenerate();
+        } finally {
+            $runtime->leave();
+        }
+        File::delete($this->directory($token).'/provisioning.json');
+        // Only replace the saved sandbox after the new copy is fully provisioned.
+        $this->removeOtherSandboxes($token);
+        $this->persistDemo(session('demo_mode'), []);
+    }
+
+    private function sandboxTables(Connection $source, Model $sourceUser): array
+    {
         $models = DemoSetting::query()->first()?->models ?? array_keys($this->modelOptions());
         $allowed = $this->modelOptions();
         $tables = [...config('demo-mode.required_tables'), $sourceUser->getTable()];
@@ -239,61 +381,36 @@ class DemoManager
                 }
             }
         }
-        $tables = array_values(array_unique(array_diff($tables, config('demo-mode.excluded_tables'))));
-        $token = (string) Str::uuid();
-        $directory = $this->directory($token);
-        File::ensureDirectoryExists($directory, 0700);
-        File::put($directory.'/database.sqlite', '');
-        $runtime = app(SandboxRuntime::class);
-        try {
-            $runtime->enter($token);
-            if (Artisan::call('migrate', ['--database' => 'demo', '--force' => true]) !== 0) {
-                throw new \RuntimeException('Demo schema creation failed.');
-            }
-            // Migrations can insert defaults. The sandbox must match the selected source data.
-            $demo = DB::connection('demo');
-            $demo->getSchemaBuilder()->disableForeignKeyConstraints();
-            $this->active = false;
-            $demo->transaction(function () use ($source, $demo, $tables): void {
-                foreach ($demo->getSchemaBuilder()->getTableListing(schemaQualified: false) as $table) {
-                    if ($table !== 'migrations') {
-                        $demo->table($table)->delete();
-                    }
-                }
-                foreach ($tables as $table) {
-                    $columns = $demo->getSchemaBuilder()->getColumnListing($table);
-                    foreach ($source->table($table)->cursor() as $row) {
-                        $demo->table($table)->insert(array_intersect_key((array) $row, array_flip($columns)));
-                    }
-                }
-            });
-            $demo->getSchemaBuilder()->enableForeignKeyConstraints();
-            if ($demo->select('PRAGMA foreign_key_check') !== []) {
-                throw new \LogicException('Demo data has missing relationships. Select the related models and try again.');
-            }
-            $demoUser = $userClass::on('demo')->findOrFail($userId);
-            $this->active = true;
-            app(ApplicationAdapter::class)->prepare($demoUser);
-            $originalSession = session('demo_mode.original_session', $this->contextSession());
-            foreach (array_keys($this->contextSession()) as $key) {
-                session()->forget($key);
-            }
-            session(['demo_mode' => ['token' => $token, 'owner' => $userId,
-                'original_session' => $originalSession,
-            ]]);
-            session()->forget('demo_mode_saved');
-            app(ApplicationAdapter::class)->clearContext();
-            session()->regenerate();
-        } catch (\Throwable $exception) {
-            DB::purge('demo');
-            File::deleteDirectory($directory);
-            throw $exception;
-        } finally {
-            $runtime->leave();
+
+        return array_values(array_unique(array_diff($tables, config('demo-mode.excluded_tables'))));
+    }
+
+    private function readProvisioning(string $token): ?array
+    {
+        $file = $this->directory($token).'/provisioning.json';
+        if (! File::exists($file)) {
+            return null;
         }
-        // Only replace the saved sandbox after the new copy is fully provisioned.
-        $this->removeOtherSandboxes($token);
-        $this->persistDemo(session('demo_mode'), []);
+        $state = json_decode(File::get($file), true, flags: JSON_THROW_ON_ERROR);
+
+        return is_array($state) ? $state : null;
+    }
+
+    private function writeProvisioning(string $token, array $state): void
+    {
+        $file = $this->directory($token).'/provisioning.json';
+        File::replace($file, json_encode($state, JSON_THROW_ON_ERROR));
+        File::chmod($file, 0600);
+    }
+
+    private function discardProvisioning(string $token): void
+    {
+        session()->forget('demo_mode_provisioning');
+        // Never delete the saved demo, even if a stale session still references it.
+        if (Str::isUuid($token) && $token !== $this->currentToken()) {
+            DB::purge('demo');
+            File::deleteDirectory($this->directory($token));
+        }
     }
 
     public function markActive(bool $active): void

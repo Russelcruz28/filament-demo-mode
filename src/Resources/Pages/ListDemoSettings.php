@@ -36,7 +36,7 @@ class ListDemoSettings extends ListRecords
                 ->modalDescription('This replaces your saved demo with a fresh sandbox. Previous demo changes will no longer be restorable.')
                 ->action(function (): void {
                     try {
-                        app(DemoManager::class)->start();
+                        app(DemoManager::class)->begin();
                     } catch (\Throwable $exception) {
                         report($exception);
                         Notification::make()->title('Demo could not start')
@@ -44,7 +44,7 @@ class ListDemoSettings extends ListRecords
 
                         return;
                     }
-                    $this->redirect(route('demo-mode.roles'));
+                    $this->redirect(route('demo-mode.provisioning'));
                 }),
         ];
     }
