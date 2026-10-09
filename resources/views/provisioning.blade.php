@@ -50,7 +50,9 @@
     <script>
         (() => {
             const STEP_URL = @json(route('demo-mode.provisioning.step'));
-            const MAX_RETRIES = 3;
+            // Progress is saved after every batch, so retries resume where the last step stopped.
+            const MAX_RETRIES = 8;
+            const MAX_DELAY_MS = 15000;
             const token = document.querySelector('meta[name="csrf-token"]').content;
             const bar = document.querySelector('[role="progressbar"]');
             const message = document.querySelector('[data-message]');
@@ -94,8 +96,12 @@
                 const body = response ? await response.json().catch(() => null) : null;
                 if (body && body.status === 'failed') return fail(body.message);
                 if (!response || !response.ok || !body) {
-                    if (retries++ >= MAX_RETRIES) return fail('The server stopped responding. Start the demo again.');
-                    return setTimeout(step, 1000 * retries);
+                    const reason = response ? 'HTTP ' + response.status : 'network error';
+                    if (retries++ >= MAX_RETRIES) {
+                        return fail('The server stopped responding (' + reason + '). Reload this page to resume, or check the server logs.');
+                    }
+                    message.textContent = 'Connection problem (' + reason + '). Retrying…';
+                    return setTimeout(step, Math.min(MAX_DELAY_MS, 1000 * 2 ** retries));
                 }
                 retries = 0;
                 show(body);

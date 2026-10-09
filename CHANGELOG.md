@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 - 2026-10-09
+
+- Stream rows while copying demo data so tables with wide rows (JSON, long
+  text) no longer exhaust PHP memory mid-copy.
+- Progress page retries longer with backoff, shows the HTTP status on failure
+  and can be reloaded to resume.
+
 ## 0.1.3 - 2026-10-09
 
 - Start/Reset now shows a progress page and copies data in chunks across short

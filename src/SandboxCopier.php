@@ -43,25 +43,37 @@ class SandboxCopier
         }
         $table = $state['tables'][$index];
         $size = max(1, (int) config('demo-mode.provisioning.chunk_size', 1000));
-        $rows = $this->chunkQuery($source, $table, $size)->get();
         $columns = array_flip($demo->getSchemaBuilder()->getColumnListing($table['name']));
-        $records = $rows->map(fn ($row): array => array_intersect_key((array) $row, $columns))->all();
         $perStatement = max(1, intdiv(self::SQLITE_MAX_BINDINGS, max(1, count($columns))));
-        if ($columns !== []) {
-            $demo->getSchemaBuilder()->withoutForeignKeyConstraints(fn () => $demo->transaction(function () use ($demo, $table, $records, $perStatement): void {
-                foreach (array_chunk($records, $perStatement) as $batch) {
-                    $demo->table($table['name'])->insert($batch);
+        // Stream rows and insert small batches so wide rows (JSON, long text) never fill PHP memory.
+        [$count, $last] = $demo->getSchemaBuilder()->withoutForeignKeyConstraints(fn (): array => $demo->transaction(
+            function () use ($source, $demo, $table, $size, $columns, $perStatement): array {
+                [$count, $last, $batch] = [0, $table['last'], []];
+                foreach ($this->chunkQuery($source, $table, $size)->cursor() as $row) {
+                    $count++;
+                    $last = $table['key'] !== null ? $row->{$table['key']} : $last;
+                    $batch[] = array_intersect_key((array) $row, $columns);
+                    if (count($batch) >= $perStatement) {
+                        $this->insert($demo, $table['name'], $batch, $columns);
+                        $batch = [];
+                    }
                 }
-            }));
-        }
-        $tables = $state['tables'];
-        $tables[$index] = [
-            ...$table,
-            'copied' => $table['copied'] + $rows->count(),
-            'last' => $table['key'] !== null && $rows->isNotEmpty() ? $rows->last()->{$table['key']} : $table['last'],
-        ];
+                $this->insert($demo, $table['name'], $batch, $columns);
 
-        return [...$state, 'tables' => $tables, 'index' => $rows->count() < $size ? $index + 1 : $index];
+                return [$count, $last];
+            }
+        ));
+        $tables = $state['tables'];
+        $tables[$index] = [...$table, 'copied' => $table['copied'] + $count, 'last' => $last];
+
+        return [...$state, 'tables' => $tables, 'index' => $count < $size ? $index + 1 : $index];
+    }
+
+    private function insert(Connection $demo, string $table, array $batch, array $columns): void
+    {
+        if ($batch !== [] && $columns !== []) {
+            $demo->table($table)->insert($batch);
+        }
     }
 
     public function progress(array $state): array
