@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7 - 2026-11-06
+
+- Show an actionable recovery page when a saved demo is missing a table or column, with reset and exit actions and support for Livewire and JSON requests.
+
 ## 0.1.6 - 2026-10-09
 
 - Saved model selections that are no longer offered (for example after their

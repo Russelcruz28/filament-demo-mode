@@ -10,8 +10,10 @@ use DemoMode\Contracts\RoleSwitcher;
 use DemoMode\Http\DemoMiddleware;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Database\Events\ConnectionEstablished;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Session\Middleware\StartSession;
@@ -39,6 +41,25 @@ class DemoModeServiceProvider extends ServiceProvider
 
     public function boot(Kernel $kernel): void
     {
+        $this->app->make(ExceptionHandler::class)->renderable(function (QueryException $exception, Request $request) {
+            if ($exception->getConnectionName() !== 'demo' || ! $request->hasSession()
+                || ! $request->session()->has('demo_mode')
+                || ! preg_match('/no such (table|column):|has no column named/i', $exception->getPrevious()?->getMessage() ?? '')) {
+                return null;
+            }
+            $url = route('demo-mode.recovery');
+            if ($request->hasHeader('X-Livewire')) {
+                return response()->json(['components' => array_map(
+                    fn ($component) => ['snapshot' => $component['snapshot'] ?? null, 'effects' => ['redirect' => $url]],
+                    $request->input('components', []),
+                )]);
+            }
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'The saved demo is out of date. Reset the demo to use the current database structure.', 'recovery_url' => $url], 409);
+            }
+
+            return redirect($url);
+        });
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'demo-mode');
         if ($this->app->runningInConsole()) {
@@ -75,6 +96,11 @@ class DemoModeServiceProvider extends ServiceProvider
         });
 
         Route::middleware('web')->group(function (): void {
+            Route::get('/demo-mode/recovery', function () {
+                abort_unless(session()->has('demo_mode') && app(DemoManager::class)->canManage(), 403);
+
+                return response()->view('demo-mode::recovery');
+            })->name('demo-mode.recovery');
             Route::get('/demo-mode/roles', function () {
                 abort_unless(app(DemoManager::class)->active(), 403);
                 $adapter = app(ApplicationAdapter::class);

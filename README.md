@@ -170,3 +170,5 @@ composer test
 composer update --with 'filament/filament:^5.0' --prefer-dist
 composer test
 ```
+
+When a saved demo is missing a table or column after an application update, the plugin directs you to a recovery page with **Reset demo** and **Exit demo** actions. Reset rebuilds the sandbox with current migrations and selected starting data; demo edits are replaced only after provisioning succeeds. JSON requests receive HTTP 409 with a `recovery_url`, and Livewire updates redirect to the recovery page. Other database errors keep their normal error handling.
