@@ -4,7 +4,7 @@
         <x-filament::modal
             id="demo-mode-provisioning"
             heading="Preparing demo"
-            description="Copying data into a private sandbox. Keep this page open."
+            description="Copying data into a private sandbox for demo users. Keep this page open."
             width="lg"
             :close-button="false"
             :close-by-clicking-away="false"
@@ -102,7 +102,9 @@
                 show(body);
                 if (body.status === 'complete') {
                     // Leave warnings (e.g. columns that were not copied) on screen for a moment.
-                    setTimeout(() => { window.location.href = body.redirect; }, (body.warnings || []).length ? 4000 : 0);
+                    // A background start stays on this page; reloading closes the modal and shows the notification.
+                    setTimeout(() => body.redirect ? (window.location.href = body.redirect) : window.location.reload(),
+                        (body.warnings || []).length ? 4000 : 0);
                     return;
                 }
                 step();
