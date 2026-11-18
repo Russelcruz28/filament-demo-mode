@@ -64,6 +64,10 @@ return [
         'pause' => ['telescope', 'pulse'],
     ],
 
+    // Start Demo publishes the demo for demo users and leaves the starter on production.
+    // true: the starter enters the new demo as a presenter (the 0.1 behaviour).
+    'enter_on_start' => false,
+
     // Users tagged in the Demo Mode settings always sign in to the saved demo.
     'demo_users' => [
         'enabled' => true,
