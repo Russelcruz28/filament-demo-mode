@@ -214,4 +214,48 @@ class DemoUsersTest extends TestCase
         $this->assertNotSame($old, session('demo_mode.token'));
         $this->assertSame($manager->currentToken(), session('demo_mode.token'));
     }
+
+    public function test_demo_users_are_told_when_they_enter_and_leave_the_demo(): void
+    {
+        $visitor = User::create(['name' => 'Visitor']);
+        $this->prepareDemo();
+        $this->tag($visitor);
+        auth()->login($visitor);
+
+        $this->get('/probe');
+        $this->assertSame('entered', session('demo_mode_notice'));
+        session()->forget('demo_mode_notice');
+        $this->get('/probe');
+        $this->assertNull(session('demo_mode_notice'), 'Only the first page explains the change.');
+
+        // The administrator resets from their own browser session.
+        $visitorState = session()->pull('demo_mode');
+        auth()->login($this->presenter);
+        app(DemoManager::class)->start();
+        auth()->login($visitor);
+        session(['demo_mode' => $visitorState]);
+        $this->get('/probe');
+        $this->assertSame('refreshed', session('demo_mode_notice'));
+
+        $this->tag();
+        $this->get('/probe');
+        $this->assertSame('removed', session('demo_mode_notice'));
+    }
+
+    public function test_presenters_are_told_when_they_enter_leave_or_the_demo_stops(): void
+    {
+        $this->prepareDemo();
+        auth()->login($this->presenter);
+        $manager = app(DemoManager::class);
+
+        $manager->restore();
+        $this->assertSame('entered', session('demo_mode_notice'));
+        $this->post(route('demo-mode.exit'))->assertRedirect();
+        $this->assertSame('exited', session('demo_mode_notice'));
+
+        $manager->restore();
+        $manager->end();
+        $this->get('/probe')->assertRedirect();
+        $this->assertSame('ended', session('demo_mode_notice'));
+    }
 }

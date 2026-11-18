@@ -28,6 +28,7 @@ class DemoMiddleware
         if ($state['visitor'] ?? false) {
             // No longer tagged: the user is back on production from this request on.
             $request->session()->forget('demo_mode');
+            $manager->notice('removed');
 
             return $next($request);
         }
@@ -40,6 +41,7 @@ class DemoMiddleware
             || ! Str::isUuid($state['token'] ?? '')
             || ! $manager->exists($state['token'])) {
             $manager->stop(preserve: false);
+            $manager->notice('ended');
 
             return redirect($adapter->destination());
         }

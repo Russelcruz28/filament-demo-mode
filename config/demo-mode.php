@@ -68,6 +68,9 @@ return [
     // true: the starter enters the new demo as a presenter (the 0.1 behaviour).
     'enter_on_start' => false,
 
+    // Explain entering, resetting and leaving the demo in the top bar on the next page.
+    'notices' => true,
+
     // Users tagged in the Demo Mode settings always sign in to the saved demo.
     'demo_users' => [
         'enabled' => true,

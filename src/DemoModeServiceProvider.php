@@ -223,6 +223,10 @@ class DemoModeServiceProvider extends ServiceProvider
             fn () => view('demo-mode::banner'),
         );
         FilamentView::registerRenderHook(
+            PanelsRenderHook::USER_MENU_BEFORE,
+            fn () => view('demo-mode::topbar-badge'),
+        );
+        FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
             fn () => view('demo-mode::provisioning-modal'),
         );

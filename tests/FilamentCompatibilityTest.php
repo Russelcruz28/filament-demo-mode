@@ -172,4 +172,52 @@ class FilamentCompatibilityTest extends TestCase
 
         $this->assertNull(app(DemoManager::class)->liveDemo());
     }
+
+    public function test_top_bar_explains_demo_mode_once(): void
+    {
+        app(DemoModeOptions::class)->prepare = fn () => null;
+        app(DemoManager::class)->start(enter: true);
+        $runtime = app(SandboxRuntime::class);
+
+        $runtime->enter(session('demo_mode.token'));
+        try {
+            $first = view('demo-mode::banner')->render();
+            $second = view('demo-mode::banner')->render();
+            $badge = view('demo-mode::topbar-badge')->render();
+        } finally {
+            $runtime->leave();
+        }
+
+        $this->assertStringContainsString('Demo mode', $first);
+        $this->assertStringContainsString('You entered the demo.', $first);
+        $this->assertStringContainsString('[Demo] ', $first);
+        $this->assertStringNotContainsString('You entered the demo.', $second);
+        $this->assertStringContainsString('Changes here do not affect real data.', $second);
+        $this->assertStringContainsString('Demo', $badge);
+        $this->assertSame('', trim(view('demo-mode::topbar-badge')->render()));
+    }
+
+    public function test_top_bar_confirms_the_return_to_live_data(): void
+    {
+        app(DemoModeOptions::class)->prepare = fn () => null;
+        app(DemoManager::class)->start(enter: true);
+        app(DemoManager::class)->stop();
+
+        $live = view('demo-mode::banner')->render();
+
+        $this->assertStringContainsString('You left demo mode. You are now working with live data', $live);
+        $this->assertStringNotContainsString('Exit demo', $live);
+        $this->assertSame('', trim(view('demo-mode::banner')->render()));
+    }
+
+    public function test_notices_are_kept_until_shown_in_the_right_place(): void
+    {
+        app(DemoManager::class)->notice('entered');
+
+        $this->assertSame('', trim(view('demo-mode::banner')->render()));
+        $this->assertSame('entered', session('demo_mode_notice'));
+        config(['demo-mode.notices' => false]);
+        app(DemoManager::class)->notice('exited');
+        $this->assertSame('', trim(view('demo-mode::banner')->render()));
+    }
 }
