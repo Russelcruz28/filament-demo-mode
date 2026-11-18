@@ -64,6 +64,12 @@ return [
         'pause' => ['telescope', 'pulse'],
     ],
 
+    // Users tagged in the Demo Mode settings always sign in to the saved demo.
+    'demo_users' => [
+        'enabled' => true,
+        'search_columns' => ['name', 'email'],
+    ],
+
     // Container swaps applied while a demo is active: [Abstract::class => Replacement::class]
     'sandbox_bindings' => [],
 
