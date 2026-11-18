@@ -108,6 +108,14 @@ class DemoModePlugin implements Plugin
         return $this;
     }
 
+    /** Tag demo users by rule (e.g. a role) in addition to the users selected in the settings. */
+    public function demoUsersUsing(Closure $callback): static
+    {
+        $this->callbacks['demoUser'] = $callback;
+
+        return $this;
+    }
+
     public function exitUsing(Closure $callback): static
     {
         $this->callbacks['exit'] = $callback;
