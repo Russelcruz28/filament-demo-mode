@@ -39,7 +39,7 @@ class SpatieIntegrationTest extends TestCase
         $this->assertTrue($adapter->canManage($user));
         $this->assertEqualsCanonicalizing(['roles', 'permissions', 'model_has_roles', 'model_has_permissions', 'role_has_permissions'], $adapter->requiredTables($user));
         $manager = app(DemoManager::class);
-        $manager->start();
+        $manager->start(enter: true);
         config(['database.connections.reporting' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
         $runtime = app(SandboxRuntime::class);
         $runtime->enter(session('demo_mode.token'));

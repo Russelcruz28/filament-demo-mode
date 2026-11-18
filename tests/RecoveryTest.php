@@ -16,7 +16,7 @@ class RecoveryTest extends TestCase
         auth()->login(User::create(['name' => 'Presenter']));
         app(DemoModeOptions::class)->authorize = fn () => true;
         app(DemoModeOptions::class)->prepare = fn () => null;
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
         Route::middleware('web')->get('/missing-demo-table', fn () => DB::table('new_table')->get());
         Route::middleware('web')->get('/missing-demo-column', fn () => DB::table('widgets')->select('widgets.new_column')->get());
 

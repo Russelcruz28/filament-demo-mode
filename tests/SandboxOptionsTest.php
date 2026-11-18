@@ -41,7 +41,7 @@ class SandboxOptionsTest extends TestCase
         DemoSetting::query()->create(['id' => 1, 'models' => [Widget::class]]);
         config(['demo-mode.sandbox.schema' => 'clone']);
 
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $this->assertSame(['Widget 1', 'Widget 2', 'Widget 3'], $this->demoWidgets());
         $this->assertSame(0, DB::connection('demo')->table('demo_settings')->count());
@@ -57,7 +57,7 @@ class SandboxOptionsTest extends TestCase
         File::put($path, implode(";\n", [...$statements, ...$migrations]).";\n");
         config(['demo-mode.sandbox.schema' => 'dump', 'demo-mode.sandbox.schema_path' => $path]);
 
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $this->assertSame(['Widget 1', 'Widget 2', 'Widget 3'], $this->demoWidgets());
     }
@@ -84,7 +84,7 @@ class SandboxOptionsTest extends TestCase
     {
         config(['demo-mode.sandbox.driver' => 'auto']);
 
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $this->assertSame('sqlite', app(DemoManager::class)->ref(session('demo_mode.token'))->driver);
     }
@@ -93,7 +93,7 @@ class SandboxOptionsTest extends TestCase
     {
         config(['demo-mode.metadata' => 'database', 'demo-mode.lock' => 'cache']);
         $manager = app(DemoManager::class);
-        $manager->start();
+        $manager->start(enter: true);
         $token = session('demo_mode.token');
         $manager->stop();
         session()->forget('demo_mode_saved');
@@ -110,7 +110,7 @@ class SandboxOptionsTest extends TestCase
     {
         config(['demo-mode.lock' => 'database']);
 
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $this->assertFileExists(config('demo-mode.root').'/.sandbox.lock');
     }
@@ -118,7 +118,7 @@ class SandboxOptionsTest extends TestCase
     public function test_sandboxes_saved_before_drivers_existed_are_restorable(): void
     {
         $manager = app(DemoManager::class);
-        $manager->start();
+        $manager->start(enter: true);
         $token = session('demo_mode.token');
         $manager->stop();
         // The 0.x metadata format had no sandbox reference.
