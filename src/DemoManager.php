@@ -11,9 +11,11 @@ use DemoMode\Models\DemoSetting;
 use DemoMode\Sandbox\Provisioner;
 use DemoMode\Sandbox\SandboxDrivers;
 use DemoMode\Sandbox\SandboxRef;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -32,6 +34,51 @@ class DemoManager
     {
         return config('demo-mode.enabled') && ! $this->active
             && app(ApplicationAdapter::class)->canManage(Auth::user());
+    }
+
+    /**
+     * Tagged demo users always work in the saved demo and never reach production. Users who can
+     * manage Demo Mode are never forced in, so tagging cannot lock out the people who untag.
+     */
+    public function isDemoUser(?Authenticatable $user): bool
+    {
+        if ($user === null || ! config('demo-mode.enabled') || ! config('demo-mode.demo_users.enabled', true)) {
+            return false;
+        }
+        $callback = app(DemoModeOptions::class)->demoUser;
+        $tagged = in_array((string) $user->getAuthIdentifier(), $this->demoUserIds(), true)
+            || ($callback !== null && (bool) $callback($user));
+
+        return $tagged && ! app(ApplicationAdapter::class)->canManage($user);
+    }
+
+    /** @return list<string> Identifiers of users tagged in the Demo Mode settings. */
+    public function demoUserIds(): array
+    {
+        try {
+            return array_values(array_map('strval', DemoSetting::query()->first()?->users ?? []));
+        } catch (QueryException) {
+            // The settings table or its users column has not been migrated yet.
+            return [];
+        }
+    }
+
+    /** Whether the current session belongs to a tagged demo user rather than a presenter. */
+    public function isVisitor(): bool
+    {
+        return (bool) session('demo_mode.visitor', false);
+    }
+
+    /** Point the current session at the saved demo for a tagged user. */
+    public function joinAsVisitor(Authenticatable $user, string $token): void
+    {
+        $state = session('demo_mode');
+        if (($state['token'] ?? null) !== $token || ($state['user'] ?? null) !== (string) $user->getAuthIdentifier()) {
+            session(['demo_mode' => [
+                'token' => $token, 'owner' => null, 'visitor' => true,
+                'user' => (string) $user->getAuthIdentifier(), 'original_session' => [],
+            ]]);
+        }
     }
 
     public function canRestore(): bool
@@ -427,6 +474,12 @@ class DemoManager
     public function stop(bool $preserve = true): void
     {
         $state = session('demo_mode');
+        // A demo user's session never replaces the presenter's saved demo or context.
+        if ($state['visitor'] ?? false) {
+            session()->forget('demo_mode');
+
+            return;
+        }
         if ($preserve && is_array($state)) {
             session(['demo_mode_saved' => [
                 'token' => $state['token'], 'owner' => $state['owner'],

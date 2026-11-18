@@ -58,6 +58,31 @@ offers Dashboard. Run `php artisan demo-mode:doctor`, open **Demo Mode**, save
 your model selection and start. The plugin owns `/demo-mode/roles`; your existing
 role chooser needs no changes.
 
+## Demo Users
+
+Tag accounts under **Demo Mode → Demo users** (for example a prospect, trainer or
+reviewer account). A tagged user who signs in always works in the saved demo:
+
+- Every web request runs in the sandbox, on any panel or route; production data is never served.
+- They keep the roles their account has in the copy; role switching, Reset and Exit are
+  unavailable. The banner offers **Sign out**.
+- They join the demo a presenter prepared (Start Demo) and follow it after a Reset.
+  Several demo users share it.
+- If no demo is ready, or the account was created after the demo was prepared, they are
+  signed out with an explanation. Reset the demo to include new accounts.
+- Users who can manage Demo Mode are never forced in, so nobody can lock themselves out.
+
+Tag by rule instead of (or as well as) by selection:
+
+```php
+DemoModePlugin::make()->demoUsersUsing(fn ($user) => $user->hasRole('prospect'))
+```
+
+Run `php artisan migrate` after upgrading (adds `demo_settings.users`). Set
+`demo_users.enabled` to `false` to turn the feature off; `demo_users.search_columns`
+controls the user search in the form. API routes outside the `web` middleware group
+are not redirected, so do not issue API tokens to demo users.
+
 ## Custom Role Systems
 
 Callbacks run against the sandbox user, except authorization, which checks the

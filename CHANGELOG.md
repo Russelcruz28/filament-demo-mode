@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Demo users: tag accounts in the Demo Mode settings (or with `demoUsersUsing()`) to make
+  them always sign in to the saved demo, with no access to production, role switching,
+  Reset or Exit. Requires `php artisan migrate` (adds `demo_settings.users`).
+
 - Sandbox drivers: `sqlite` (unchanged default), `pgsql-schema`, `pgsql-database` and
   `mysql-database`, selected with `sandbox.driver` (`auto` follows the source engine) or
   `DemoModePlugin::make()->sandboxDriver()`. Custom drivers implement `SandboxDriver`.

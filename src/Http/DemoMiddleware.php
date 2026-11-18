@@ -17,11 +17,24 @@ class DemoMiddleware
     {
         $manager = app(DemoManager::class);
         // Livewire may also run persistent middleware in the same request.
-        if ($manager->active() || ! $request->hasSession() || ! ($state = $request->session()->get('demo_mode'))) {
+        if ($manager->active() || ! $request->hasSession()) {
+            return $next($request);
+        }
+        $state = $request->session()->get('demo_mode');
+        $user = Auth::user();
+        if ($user !== null && $manager->isDemoUser($user)) {
+            return $this->demoUser($request, $next, $manager, $user);
+        }
+        if ($state['visitor'] ?? false) {
+            // No longer tagged: the user is back on production from this request on.
+            $request->session()->forget('demo_mode');
+
+            return $next($request);
+        }
+        if (! $state) {
             return $next($request);
         }
         $adapter = app(ApplicationAdapter::class);
-        $user = Auth::user();
         if (! config('demo-mode.enabled') || ! $adapter->canManage($user)
             || (string) $user?->getAuthIdentifier() !== (string) ($state['owner'] ?? '')
             || ! Str::isUuid($state['token'] ?? '')
@@ -45,5 +58,52 @@ class DemoMiddleware
             $runtime->leave();
             Auth::forgetGuards();
         }
+    }
+
+    /**
+     * Tagged users always run in the saved demo, keep their own copied roles, and are signed out
+     * rather than ever being served from production.
+     */
+    private function demoUser(Request $request, Closure $next, DemoManager $manager, $user): Response
+    {
+        $token = $manager->currentToken();
+        if ($token === null || ! $manager->exists($token)) {
+            return $this->signOut($request, 'There is no demo ready for your account yet. Please try again later.');
+        }
+        $manager->joinAsVisitor($user, $token);
+        if ($request->routeIs('demo-mode.exit', 'demo-mode.recovery', 'demo-mode.unavailable')) {
+            return $next($request);
+        }
+        $runtime = app(SandboxRuntime::class);
+        try {
+            $runtime->enter($token);
+            Auth::forgetGuards();
+            // The account exists in production but was created after the demo was copied.
+            if (Auth::check()) {
+                return $next($request);
+            }
+        } finally {
+            $runtime->leave();
+            Auth::forgetGuards();
+        }
+
+        return $this->signOut($request, 'Your account was added after this demo was prepared. Ask an administrator to reset the demo.');
+    }
+
+    private function signOut(Request $request, string $message): Response
+    {
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        $request->session()->flash('demo_mode_unavailable', $message);
+        $url = route('demo-mode.unavailable');
+        if ($request->hasHeader('X-Livewire')) {
+            return response()->json(['components' => array_map(
+                fn ($component) => ['snapshot' => $component['snapshot'] ?? null, 'effects' => ['redirect' => $url]],
+                (array) $request->input('components', []),
+            )]);
+        }
+
+        return $request->expectsJson() ? response()->json(['message' => $message, 'redirect' => $url], 409) : redirect($url);
     }
 }

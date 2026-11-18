@@ -17,4 +17,6 @@ class DemoModeOptions
     public ?Closure $switchRole = null;
 
     public ?Closure $exit = null;
+
+    public ?Closure $demoUser = null;
 }

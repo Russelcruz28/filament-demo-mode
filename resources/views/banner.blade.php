@@ -7,6 +7,16 @@
     </style>
     <div class="demo-mode-banner" role="status">
         <strong>Demo mode</strong>
+        @if (app(\DemoMode\DemoManager::class)->isVisitor())
+            <span>Changes you make here do not affect real data.</span>
+            <form method="POST" action="{{ route('demo-mode.exit') }}">
+                @csrf
+                <button type="submit">
+                    <x-filament::icon icon="heroicon-o-arrow-right-start-on-rectangle" style="width:16px;height:16px;" />
+                    Sign out
+                </button>
+            </form>
+        @else
         <a href="{{ route('demo-mode.roles') }}">
             <x-filament::icon icon="heroicon-o-users" style="width:16px;height:16px;" />
             Switch role
@@ -25,5 +35,6 @@
                 Exit demo
             </button>
         </form>
+        @endif
     </div>
 @endif

@@ -26,6 +26,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -130,19 +131,24 @@ class DemoModeServiceProvider extends ServiceProvider
 
         Route::middleware('web')->group(function (): void {
             Route::get('/demo-mode/recovery', function () {
-                abort_unless(session()->has('demo_mode') && app(DemoManager::class)->canManage(), 403);
+                $manager = app(DemoManager::class);
+                abort_unless(session()->has('demo_mode') && ($manager->canManage() || $manager->isVisitor()), 403);
 
-                return response()->view('demo-mode::recovery');
+                return response()->view('demo-mode::recovery', ['visitor' => $manager->isVisitor()]);
             })->name('demo-mode.recovery');
+            Route::get('/demo-mode/unavailable', fn () => response()->view('demo-mode::unavailable', [
+                'message' => session('demo_mode_unavailable', 'The demo is not available right now.'),
+            ], 503))->name('demo-mode.unavailable');
             Route::get('/demo-mode/roles', function () {
-                abort_unless(app(DemoManager::class)->active(), 403);
+                // Demo users keep the roles their account has; only presenters switch.
+                abort_unless(app(DemoManager::class)->active() && ! app(DemoManager::class)->isVisitor(), 403);
                 $adapter = app(ApplicationAdapter::class);
                 abort_unless($adapter instanceof RoleSwitcher, 501, 'Configure the demo role switcher adapter.');
 
                 return view('demo-mode::roles', ['roles' => $adapter->roles(auth()->user())]);
             })->name('demo-mode.roles');
             Route::post('/demo-mode/roles', function (Request $request) {
-                abort_unless(app(DemoManager::class)->active(), 403);
+                abort_unless(app(DemoManager::class)->active() && ! app(DemoManager::class)->isVisitor(), 403);
                 $adapter = app(ApplicationAdapter::class);
                 abort_unless($adapter instanceof RoleSwitcher, 501);
                 $data = $request->validate(['role' => ['required', 'string', 'max:255']]);
@@ -156,8 +162,16 @@ class DemoModeServiceProvider extends ServiceProvider
 
                 return Storage::disk($disk)->response($path);
             })->where('path', '.*')->name('demo-mode.files');
-            Route::post('/demo-mode/exit', function () {
+            Route::post('/demo-mode/exit', function (Request $request) {
                 abort_unless(session()->has('demo_mode'), 403);
+                // Demo users have no production session to return to.
+                if (app(DemoManager::class)->isVisitor()) {
+                    Auth::logout();
+                    $request->session()->invalidate();
+                    $request->session()->regenerateToken();
+
+                    return redirect(app(ApplicationAdapter::class)->destination());
+                }
                 app(DemoManager::class)->stop();
 
                 return redirect(app(ApplicationAdapter::class)->destination());

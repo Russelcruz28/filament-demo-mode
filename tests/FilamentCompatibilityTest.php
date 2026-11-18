@@ -10,6 +10,7 @@ use DemoMode\Models\DemoSetting;
 use DemoMode\Resources\DemoSettingResource;
 use DemoMode\Resources\Pages\EditDemoSetting;
 use DemoMode\Resources\Pages\ListDemoSettings;
+use DemoMode\SandboxRuntime;
 use DemoMode\Tests\Fixtures\User;
 use DemoMode\Tests\Fixtures\Widget;
 use Filament\Actions\ActionsServiceProvider;
@@ -111,5 +112,41 @@ class FilamentCompatibilityTest extends TestCase
         app(DemoManager::class)->begin();
 
         $this->assertNotNull(app(DemoManager::class)->provisioning());
+    }
+
+    public function test_management_form_tags_demo_users(): void
+    {
+        $setting = DemoSetting::create(['models' => [Widget::class]]);
+        $visitor = User::create(['name' => 'Visiting Prospect']);
+        $search = new \ReflectionMethod(DemoSettingResource::class, 'searchUsers');
+
+        $this->assertSame([(string) $visitor->id => 'Visiting Prospect'], $search->invoke(null, 'prospect'));
+        Livewire::test(EditDemoSetting::class, ['record' => $setting->getRouteKey()])
+            ->assertFormFieldExists('users')
+            ->fillForm(['users' => [(string) $visitor->id]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame([(string) $visitor->id], $setting->fresh()->users);
+        $this->assertSame([(string) $visitor->id], app(DemoManager::class)->demoUserIds());
+    }
+
+    public function test_demo_user_banner_offers_only_sign_out(): void
+    {
+        app(DemoModeOptions::class)->prepare = fn () => null;
+        app(DemoManager::class)->start();
+        $token = session('demo_mode.token');
+        session(['demo_mode' => ['token' => $token, 'owner' => null, 'visitor' => true, 'user' => (string) auth()->id()]]);
+        $runtime = app(SandboxRuntime::class);
+        $runtime->enter($token);
+        try {
+            $banner = view('demo-mode::banner')->render();
+        } finally {
+            $runtime->leave();
+        }
+
+        $this->assertStringContainsString('Sign out', $banner);
+        $this->assertStringNotContainsString('Switch role', $banner);
+        $this->assertStringNotContainsString('Reset demo', $banner);
     }
 }

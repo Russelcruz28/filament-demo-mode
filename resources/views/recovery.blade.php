@@ -7,6 +7,10 @@
 </head>
 <body>
     <main style="max-width:640px;margin:10vh auto;padding:24px;font:16px/1.6 system-ui,sans-serif">
+        @if ($visitor ?? false)
+        <h1>This demo is being updated</h1>
+        <p>The application changed since this demo was prepared. An administrator needs to reset the demo before you can continue.</p>
+        @else
         <h1>Your saved demo needs a reset</h1>
         <p>The application needs a table or column that is missing from this saved demo. This can happen after a database update.</p>
         <p>Reset the demo to rebuild it using the current database structure and selected starting data. Your demo changes will be replaced when the new demo is ready.</p>
@@ -42,9 +46,10 @@
                 step();
             </script>
         @endif
+        @endif
         <form method="POST" action="{{ route('demo-mode.exit') }}" style="margin-top:16px">
             @csrf
-            <button type="submit">Exit demo</button>
+            <button type="submit">{{ ($visitor ?? false) ? 'Sign out' : 'Exit demo' }}</button>
         </form>
     </main>
 </body>
