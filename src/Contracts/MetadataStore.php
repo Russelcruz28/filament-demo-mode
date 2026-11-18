@@ -12,6 +12,8 @@ interface MetadataStore
 
     public function setCurrent(array $saved): void;
 
+    public function forgetCurrent(): void;
+
     public function provisioning(string $token): ?array;
 
     public function saveProvisioning(string $token, array $state): void;
