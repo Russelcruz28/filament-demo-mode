@@ -19,6 +19,11 @@
                     <span data-message>{{ $progress['message'] }}</span>
                     <span data-percent>{{ $progress['percent'] }}%</span>
                 </div>
+                <ul data-warnings @if (empty($progress['warnings'])) hidden @endif style="margin-top:12px;padding-left:18px;list-style:disc;font-size:13px;color:var(--warning-700);overflow-wrap:anywhere;">
+                    @foreach ($progress['warnings'] ?? [] as $warning)
+                        <li>{{ $warning }}</li>
+                    @endforeach
+                </ul>
                 <p role="alert" data-error hidden style="margin-top:12px;font-size:14px;color:var(--danger-600);"></p>
             </div>
 
@@ -44,6 +49,7 @@
             const message = root.querySelector('[data-message]');
             const percent = root.querySelector('[data-percent]');
             const error = root.querySelector('[data-error]');
+            const warnings = root.querySelector('[data-warnings]');
             let cancelled = false;
             let retries = 0;
 
@@ -54,6 +60,9 @@
                 root.querySelector('[data-bar]').style.width = progress.percent + '%';
                 message.textContent = progress.message;
                 percent.textContent = progress.percent + '%';
+                const items = progress.warnings || [];
+                warnings.replaceChildren(...items.map((text) => Object.assign(document.createElement('li'), { textContent: text })));
+                warnings.hidden = items.length === 0;
             };
 
             // Cancelling also clears any half-built sandbox, so it doubles as "Close" after a failure.
@@ -92,7 +101,8 @@
                 retries = 0;
                 show(body);
                 if (body.status === 'complete') {
-                    window.location.href = body.redirect;
+                    // Leave warnings (e.g. columns that were not copied) on screen for a moment.
+                    setTimeout(() => { window.location.href = body.redirect; }, (body.warnings || []).length ? 4000 : 0);
                     return;
                 }
                 step();
