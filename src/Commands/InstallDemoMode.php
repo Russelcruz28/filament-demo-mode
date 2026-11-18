@@ -13,12 +13,18 @@ class InstallDemoMode extends Command
 
     public function handle(): int
     {
+        $path = config_path('demo-mode.php');
+        $fresh = $this->option('force') || ! is_file($path);
         $published = $this->call('vendor:publish', [
             '--provider' => DemoModeServiceProvider::class,
             '--tag' => 'demo-mode-config', '--force' => (bool) $this->option('force'),
         ]);
         if ($published !== self::SUCCESS) {
             return $published;
+        }
+        // New installs keep the source database engine; the package default stays sqlite for existing installs.
+        if ($fresh && is_file($path)) {
+            file_put_contents($path, str_replace("env('DEMO_MODE_DRIVER', 'sqlite')", "env('DEMO_MODE_DRIVER', 'auto')", file_get_contents($path)));
         }
         if ($this->option('migrate')) {
             $result = $this->call('migrate', [
