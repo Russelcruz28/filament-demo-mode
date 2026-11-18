@@ -27,6 +27,11 @@ class DatabaseMetadataStore implements MetadataStore
         });
     }
 
+    public function forgetCurrent(): void
+    {
+        $this->connection()->table(self::TABLE)->where('status', 'current')->delete();
+    }
+
     public function provisioning(string $token): ?array
     {
         return $this->decode($this->connection()->table(self::TABLE)->where('token', $token)->where('status', 'provisioning')->value('state'));
