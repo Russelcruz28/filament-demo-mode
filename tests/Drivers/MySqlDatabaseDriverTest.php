@@ -54,7 +54,7 @@ class MySqlDatabaseDriverTest extends DriverContract
     {
         $this->seedSource();
         $this->source()->table('people')->where('id', 1)->update(['name_upper' => 'custom']);
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $runtime = app(SandboxRuntime::class);
         $runtime->enter(session('demo_mode.token'));
@@ -74,7 +74,7 @@ class MySqlDatabaseDriverTest extends DriverContract
     {
         $this->seedSource();
         config(['demo-mode.sandbox.schema' => 'clone']);
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $runtime = app(SandboxRuntime::class);
         $runtime->enter(session('demo_mode.token'));
@@ -98,10 +98,10 @@ class MySqlDatabaseDriverTest extends DriverContract
         config(['demo-mode.sandbox.pool' => ['demo_pool_a', 'demo_pool_b']]);
         $this->seedSource();
         $manager = app(DemoManager::class);
-        $manager->start();
+        $manager->start(enter: true);
         $first = $manager->ref(session('demo_mode.token'))->container;
         $manager->stop();
-        $manager->start();
+        $manager->start(enter: true);
         $second = $manager->ref(session('demo_mode.token'))->container;
 
         $this->assertNotSame($first, $second);

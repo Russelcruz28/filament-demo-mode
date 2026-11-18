@@ -23,7 +23,7 @@ class PostgresSchemaDriverTest extends DriverContract
         $this->seedSource();
         $this->source()->table('people')->where('id', 1)->update(['name_upper' => 'custom']);
         $lastTicket = $this->source()->table('tickets')->max('number');
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $runtime = app(SandboxRuntime::class);
         $runtime->enter(session('demo_mode.token'));
@@ -47,7 +47,7 @@ class PostgresSchemaDriverTest extends DriverContract
     {
         $this->seedSource();
         config(['demo-mode.sandbox.schema' => 'clone']);
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $runtime = app(SandboxRuntime::class);
         $runtime->enter(session('demo_mode.token'));
@@ -82,7 +82,7 @@ class PostgresSchemaDriverTest extends DriverContract
         config(['database.connections.sandbox_role' => [...static::sourceConfig(), 'username' => 'demo_sandbox', 'password' => 'secret'],
             'demo-mode.sandbox.connection' => 'sandbox_role']);
         $this->seedSource();
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
         $this->assertSame(7, $this->demo()->table('people')->count());
         // A production table the sandbox does not have: unqualified queries would fall through the search_path.
         $this->source()->statement('create table secrets (value text)');

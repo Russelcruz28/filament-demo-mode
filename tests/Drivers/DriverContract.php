@@ -136,7 +136,7 @@ abstract class DriverContract extends TestCase
     {
         $this->seedSource();
 
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $demo = $this->demo();
         foreach (['teams', 'people', 'memberships', 'logs', 'tickets', 'users'] as $table) {
@@ -150,7 +150,7 @@ abstract class DriverContract extends TestCase
     {
         $this->seedSource();
         $maxPerson = $this->source()->table('people')->max('id');
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $runtime = app(SandboxRuntime::class);
         $runtime->enter(session('demo_mode.token'));
@@ -166,7 +166,7 @@ abstract class DriverContract extends TestCase
     public function test_writes_during_the_demo_never_reach_the_source(): void
     {
         $this->seedSource();
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $runtime = app(SandboxRuntime::class);
         $runtime->enter(session('demo_mode.token'));
@@ -189,7 +189,7 @@ abstract class DriverContract extends TestCase
     {
         $this->seedSource();
         $manager = app(DemoManager::class);
-        $manager->start();
+        $manager->start(enter: true);
         $saved = session('demo_mode.token');
         $savedRef = $manager->ref($saved);
         $manager->stop();
@@ -207,7 +207,7 @@ abstract class DriverContract extends TestCase
     {
         $this->seedSource();
         $manager = app(DemoManager::class);
-        $manager->start();
+        $manager->start(enter: true);
         $saved = $manager->ref(session('demo_mode.token'));
         $manager->stop();
 
@@ -226,10 +226,10 @@ abstract class DriverContract extends TestCase
     {
         $this->seedSource();
         $manager = app(DemoManager::class);
-        $manager->start();
+        $manager->start(enter: true);
         $first = $manager->ref(session('demo_mode.token'));
         $manager->stop();
-        $manager->start();
+        $manager->start(enter: true);
         $second = $manager->ref(session('demo_mode.token'));
 
         $this->assertFalse($this->driver()->exists($first));
@@ -249,7 +249,7 @@ abstract class DriverContract extends TestCase
         $this->assertStringContainsString('people.nickname', $this->provisionUntilFailure()->getMessage());
 
         config(['demo-mode.sandbox.schema' => 'clone']);
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
         $this->assertSame(7, $this->demo()->table('people')->where('nickname', 'nick')->count());
         $this->assertEquals($this->rows($this->source(), 'memberships'), $this->rows($this->demo(), 'memberships'));
     }
@@ -266,7 +266,7 @@ abstract class DriverContract extends TestCase
         } while ($progress['status'] === 'running');
 
         $this->assertStringContainsString('people.nickname', implode(' ', $progress['warnings']));
-        $this->assertSame(7, $this->demo()->table('people')->count());
+        $this->assertSame(7, $this->demo($manager->currentToken())->table('people')->count());
     }
 
     public function test_doctor_provisions_a_throwaway_sandbox(): void
