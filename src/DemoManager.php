@@ -69,11 +69,22 @@ class DemoManager
         return (bool) session('demo_mode.visitor', false);
     }
 
+    /**
+     * Remember a demo-mode change to explain in the top bar on the next page:
+     * entered | refreshed (shown inside the demo) and exited | removed | ended (shown on live data).
+     */
+    public function notice(string $type): void
+    {
+        session(['demo_mode_notice' => $type]);
+    }
+
     /** Point the current session at the saved demo for a tagged user. */
     public function joinAsVisitor(Authenticatable $user, string $token): void
     {
         $state = session('demo_mode');
         if (($state['token'] ?? null) !== $token || ($state['user'] ?? null) !== (string) $user->getAuthIdentifier()) {
+            // Same user, new token: the demo was reset while they were using it.
+            $this->notice(isset($state['token']) && ($state['user'] ?? null) === (string) $user->getAuthIdentifier() ? 'refreshed' : 'entered');
             session(['demo_mode' => [
                 'token' => $token, 'owner' => null, 'visitor' => true,
                 'user' => (string) $user->getAuthIdentifier(), 'original_session' => [],
@@ -213,6 +224,7 @@ class DemoManager
         ]]);
         session()->forget('demo_mode_saved');
         session()->regenerate();
+        $this->notice('entered');
     }
 
     public function modelOptions(): array
@@ -275,7 +287,7 @@ class DemoManager
     public function begin(?bool $enter = null): void
     {
         abort_unless($this->canManage(), 403);
-        $enter ??= (bool) config('demo-mode.enter_on_start', false) || session()->has('demo_mode');
+        $enter ??= (bool) config('demo-mode.enter_on_start', false) || (session()->has('demo_mode') && ! $this->isVisitor());
         $this->withStorageLock(function () use ($enter): void {
             if (is_string($pending = session('demo_mode_provisioning'))) {
                 $this->discardProvisioning($pending);
@@ -417,6 +429,7 @@ class DemoManager
             $demoUser = $userClass::on('demo')->findOrFail($userId);
             app(ApplicationAdapter::class)->prepare($demoUser);
             if ($enter) {
+                $this->notice(session()->has('demo_mode') ? 'refreshed' : 'entered');
                 $originalSession = session('demo_mode.original_session', $this->contextSession());
                 foreach (array_keys($this->contextSession()) as $key) {
                     session()->forget($key);
@@ -543,6 +556,7 @@ class DemoManager
         app(ApplicationAdapter::class)->clearContext();
         session()->put($original);
         session()->regenerate();
+        $this->notice('exited');
     }
 
     private function contextSession(): array
