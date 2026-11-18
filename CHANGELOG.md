@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Top bar explains demo mode: a permanent amber bar and **Demo** badge in the panel top bar
+  while in the demo, a `[Demo]` tab-title prefix, and one-time messages when entering,
+  being reset, leaving, losing demo access or the demo being stopped (`notices`).
 - **Start Demo publishes the demo without entering it.** The starter stays on production and
   sees a "Demo is live" notification; tagged demo users sign in to it. New **Stop Demo** action
   and a demo status column; Restore Demo is now **Open Demo**. Reset from inside a demo still

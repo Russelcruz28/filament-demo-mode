@@ -92,6 +92,21 @@ Run `php artisan migrate` after upgrading (adds `demo_settings.users`). Set
 controls the user search in the form. API routes outside the `web` middleware group
 are not redirected, so do not issue API tokens to demo users.
 
+## Knowing Whether You Are in the Demo
+
+Panels show a bar across the top of every page:
+
+- **In the demo** (amber): "Demo mode — you are using a practice copy. Changes here do not
+  affect real data", with Sign out for demo users or Switch role / Reset / Exit for presenters.
+  A **Demo** badge sits next to the user menu (visible while scrolling) and the browser tab
+  title starts with `[Demo]`.
+- **Just changed** (shown once on the next page): entering the demo, the demo being reset,
+  and, back on live data (blue), leaving the demo, demo access being removed, or the demo
+  being stopped.
+
+Set `notices` to `false` to keep the permanent bar but skip the one-time messages. Pages
+outside Filament panels can use `@demomode … @enddemomode` to show their own indicator.
+
 ## Custom Role Systems
 
 Callbacks run against the sandbox user, except authorization, which checks the
