@@ -28,3 +28,43 @@ jobs:
       - run: composer audit
       - run: composer test
       - run: composer lint
+  drivers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: PostgreSQL 15, image: 'postgres:15', port: 5432, kind: pgsql, health: 'pg_isready -U postgres' }
+          - { name: PostgreSQL 16, image: 'postgres:16', port: 5432, kind: pgsql, health: 'pg_isready -U postgres' }
+          - { name: PostgreSQL 17, image: 'postgres:17', port: 5432, kind: pgsql, health: 'pg_isready -U postgres' }
+          - { name: MySQL 8, image: 'mysql:8.4', port: 3306, kind: mysql, driver: mysql, health: 'mysqladmin ping -h 127.0.0.1 -psecret' }
+          - { name: MariaDB 11, image: 'mariadb:11', port: 3306, kind: mysql, driver: mariadb, health: 'healthcheck.sh --connect --innodb_initialized' }
+    name: Sandbox drivers / ${{ matrix.name }}
+    services:
+      db:
+        image: ${{ matrix.image }}
+        env:
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: demo_test
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: demo_test
+          MARIADB_ROOT_PASSWORD: secret
+          MARIADB_DATABASE: demo_test
+        ports: ['${{ matrix.port }}:${{ matrix.port }}']
+        options: >-
+          --health-cmd "${{ matrix.health }}" --health-interval 5s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          extensions: pdo_sqlite, pdo_pgsql, pdo_mysql, intl, mbstring
+          coverage: none
+      - run: composer update --prefer-dist --no-interaction
+      - run: vendor/bin/phpunit tests/Drivers
+        env:
+          DEMO_MODE_TEST_PGSQL_HOST: ${{ matrix.kind == 'pgsql' && '127.0.0.1' || '' }}
+          DEMO_MODE_TEST_PGSQL_PASSWORD: secret
+          DEMO_MODE_TEST_MYSQL_HOST: ${{ matrix.kind == 'mysql' && '127.0.0.1' || '' }}
+          DEMO_MODE_TEST_MYSQL_DRIVER: ${{ matrix.driver }}
+          DEMO_MODE_TEST_MYSQL_PASSWORD: secret
