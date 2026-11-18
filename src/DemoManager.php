@@ -3,12 +3,17 @@
 namespace DemoMode;
 
 use DemoMode\Contracts\ApplicationAdapter;
+use DemoMode\Contracts\LockProvider;
+use DemoMode\Contracts\MetadataStore;
 use DemoMode\Contracts\RequiredTables;
+use DemoMode\Drivers\SqliteDriver;
 use DemoMode\Models\DemoSetting;
+use DemoMode\Sandbox\Provisioner;
+use DemoMode\Sandbox\SandboxDrivers;
+use DemoMode\Sandbox\SandboxRef;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -31,32 +36,71 @@ class DemoManager
 
     public function canRestore(): bool
     {
+        // Metadata may live on the source connection, so it is only read outside the sandbox.
+        if (! $this->canManage() || session()->has('demo_mode')) {
+            return false;
+        }
         $saved = $this->savedDemo();
-        if (! $this->canManage() || session()->has('demo_mode') || ! is_array($saved)
-            || (string) ($saved['owner'] ?? '') !== (string) Auth::id()
+        if (! is_array($saved) || (string) ($saved['owner'] ?? '') !== (string) Auth::id()
             || ! Str::isUuid($saved['token'] ?? '')) {
             return false;
         }
 
-        $directory = $this->directory($saved['token']);
-
-        return File::exists($directory.'/database.sqlite');
+        return $this->exists($saved['token']);
     }
 
     private function savedDemo(): ?array
     {
-        $file = config('demo-mode.root').'/current.json';
-        if (File::exists($file)) {
-            try {
-                $saved = json_decode(File::get($file), true, flags: JSON_THROW_ON_ERROR);
+        return $this->metadata()->current() ?? session('demo_mode_saved');
+    }
 
-                return is_array($saved) ? $saved : null;
-            } catch (\JsonException) {
-                return null;
-            }
+    private function metadata(): MetadataStore
+    {
+        return app(MetadataStore::class);
+    }
+
+    private function drivers(): SandboxDrivers
+    {
+        return app(SandboxDrivers::class);
+    }
+
+    private function provisioner(): Provisioner
+    {
+        return app(Provisioner::class);
+    }
+
+    /**
+     * The sandbox a token refers to: from the saved demo, the provisioning state, or, for sandboxes
+     * created before drivers existed, the SQLite file in the token's directory.
+     */
+    public function ref(string $token): SandboxRef
+    {
+        if (! Str::isUuid($token)) {
+            throw new \InvalidArgumentException('Invalid demo sandbox token.');
+        }
+        $saved = $this->savedDemo();
+        if (($saved['token'] ?? null) === $token && is_array($saved['ref'] ?? null)) {
+            return SandboxRef::fromArray($saved['ref']);
+        }
+        if (is_array($ref = $this->metadata()->provisioning($token)['ref'] ?? null)) {
+            return SandboxRef::fromArray($ref);
+        }
+        $source = DB::connection();
+        $driver = is_file($this->directory($token).'/database.sqlite') ? $this->drivers()->make('sqlite') : $this->drivers()->resolve($source);
+
+        return $driver->ref($token, isset($saved['owner']) ? (string) $saved['owner'] : null, $source);
+    }
+
+    /** Whether the token's sandbox container still exists. */
+    public function exists(string $token): bool
+    {
+        try {
+            $ref = $this->ref($token);
+        } catch (\InvalidArgumentException) {
+            return false;
         }
 
-        return session('demo_mode_saved');
+        return $this->drivers()->for($ref)->exists($ref);
     }
 
     public function currentToken(): ?string
@@ -66,11 +110,11 @@ class DemoManager
         return is_string($token) && Str::isUuid($token) ? $token : null;
     }
 
-    private function persistDemo(array $state, array $context): void
+    private function persistDemo(array $state, array $context, SandboxRef $ref): void
     {
-        $saved = ['token' => $state['token'], 'owner' => $state['owner'], 'context' => $context];
-        File::replace(config('demo-mode.root').'/current.json', json_encode($saved, JSON_THROW_ON_ERROR));
-        File::chmod(config('demo-mode.root').'/current.json', 0600);
+        $this->metadata()->setCurrent([
+            'token' => $state['token'], 'owner' => $state['owner'], 'context' => $context, 'ref' => $ref->toArray(),
+        ]);
         File::delete($this->directory($state['token']).'/expires_at');
     }
 
@@ -103,7 +147,9 @@ class DemoManager
             }
         }
         $options = [];
-        $tables = DB::connection()->getSchemaBuilder()->getTableListing(schemaQualified: false);
+        $schema = DB::connection()->getSchemaBuilder();
+        // PostgreSQL lists every schema (including sandbox schemas) unless the search path is given.
+        $tables = $schema->getTableListing($schema->getCurrentSchemaListing(), schemaQualified: false);
         foreach ($classes as $class) {
             if (is_subclass_of($class, Model::class) && ! (new \ReflectionClass($class))->isAbstract()) {
                 $model = new $class;
@@ -129,11 +175,7 @@ class DemoManager
 
     public function configure(string $token): void
     {
-        DB::purge('demo');
-        config(['database.connections.demo' => [
-            'driver' => 'sqlite', 'database' => $this->directory($token).'/database.sqlite',
-            'prefix' => '', 'foreign_key_constraints' => true, 'busy_timeout' => 10000,
-        ]]);
+        $this->drivers()->connect($this->ref($token));
     }
 
     /**
@@ -159,13 +201,17 @@ class DemoManager
                 throw new \LogicException('Demo Mode requires an Eloquent authenticatable user model.');
             }
             $source = DB::connection();
-            $plan = app(SandboxCopier::class)->plan($source, $this->sandboxTables($source, $sourceUser));
+            $driver = $this->drivers()->resolve($source);
+            $capability = $driver->supports($source)->merge($this->drivers()->schemaSource()->supports($driver, $source));
+            if (! $capability->supported()) {
+                throw new ProvisioningFailed(implode(' ', $capability->reasons));
+            }
+            $tables = $this->sandboxTables($source, $sourceUser);
             $token = (string) Str::uuid();
             File::ensureDirectoryExists($this->directory($token), 0700);
-            File::put($this->directory($token).'/database.sqlite', '');
-            $this->writeProvisioning($token, [
-                'owner' => Auth::id(), 'source' => $source->getName(),
-                'phase' => 'migrate', 'index' => 0, 'tables' => $plan,
+            $ref = $driver->ref($token, (string) Auth::id(), $source);
+            $this->metadata()->saveProvisioning($token, [
+                ...$this->provisioner()->state($ref, $source, $tables), 'owner' => Auth::id(),
             ]);
             session(['demo_mode_provisioning' => $token]);
         });
@@ -177,9 +223,9 @@ class DemoManager
         if (! is_string($token) || ! Str::isUuid($token)) {
             return null;
         }
-        $state = $this->readProvisioning($token);
+        $state = $this->metadata()->provisioning($token);
 
-        return $state === null ? null : app(SandboxCopier::class)->progress($state);
+        return $state === null || ! isset($state['ref']) ? null : $this->provisioner()->progress($state);
     }
 
     /**
@@ -212,36 +258,39 @@ class DemoManager
 
     private function withStorageLock(\Closure $callback): mixed
     {
-        File::ensureDirectoryExists(config('demo-mode.root'), 0700);
-        $lock = fopen(config('demo-mode.root').'/.sandbox.lock', 'c');
-        if ($lock === false) {
-            throw new \RuntimeException('Could not open the demo storage lock.');
-        }
-        try {
-            if (! flock($lock, LOCK_EX)) {
-                throw new \RuntimeException('Could not lock demo storage.');
-            }
-
-            return $callback();
-        } finally {
-            flock($lock, LOCK_UN);
-            fclose($lock);
-        }
+        return app(LockProvider::class)->run($callback);
     }
 
+    /**
+     * Remove every sandbox except the given one: token directories (files, cache, SQLite) and
+     * server-side containers owned by the sandbox's driver.
+     */
     private function removeOtherSandboxes(string $token): int
     {
-        $keep = $this->directory($token);
-        if (! File::exists($keep.'/database.sqlite')) {
+        $keepRef = $this->ref($token);
+        $driver = $this->drivers()->for($keepRef);
+        if (! $driver->exists($keepRef)) {
             throw new \InvalidArgumentException('The demo sandbox to retain does not exist.');
         }
-        $count = 0;
+        $keep = $this->directory($token);
+        [$count, $removed] = [0, []];
         foreach (File::directories(config('demo-mode.root')) as $directory) {
             if ($directory !== $keep && Str::isUuid(basename($directory))) {
                 if (! File::deleteDirectory($directory)) {
                     throw new \RuntimeException('Could not remove an obsolete demo sandbox.');
                 }
+                $removed[] = basename($directory);
                 $count++;
+            }
+        }
+        if (! $driver instanceof SqliteDriver) {
+            $source = DB::connection($keepRef->source);
+            $known = array_map(fn (string $removedToken): string => $driver->ref($removedToken, null, $source)->container, $removed);
+            foreach ($driver->list() as $container) {
+                if ($container !== $keepRef->container) {
+                    $driver->drop(new SandboxRef((string) Str::uuid(), $driver->key(), $container, source: $keepRef->source));
+                    $count += in_array($container, $known, true) ? 0 : 1;
+                }
             }
         }
 
@@ -250,60 +299,25 @@ class DemoManager
 
     private function advanceLocked(string $token): array
     {
-        $state = $this->readProvisioning($token)
-            ?? throw new ProvisioningFailed('This demo was cancelled or replaced by another demo. Start it again.');
+        $state = $this->metadata()->provisioning($token);
+        // States written before sandbox drivers existed cannot be resumed.
+        if ($state === null || ! isset($state['ref'])) {
+            throw new ProvisioningFailed('This demo was cancelled or replaced by another demo. Start it again.');
+        }
         abort_unless((string) $state['owner'] === (string) Auth::id(), 403);
-        $copier = app(SandboxCopier::class);
-        $source = DB::connection($state['source']);
+        $provisioner = $this->provisioner();
         $deadline = microtime(true) + max(0, (float) config('demo-mode.provisioning.step_seconds', 5));
-        $this->configure($token);
         do {
-            $state = match ($state['phase']) {
-                'migrate' => $this->migrateSandbox($token, $state),
-                'copy' => $copier->copyChunk($source, DB::connection('demo'), $state),
-                'verify' => $this->verifySandbox($state),
-            };
-            $this->writeProvisioning($token, $state);
+            $state = $provisioner->step($state);
+            $this->metadata()->saveProvisioning($token, $state);
         } while ($state['phase'] !== 'ready' && microtime(true) < $deadline);
         if ($state['phase'] !== 'ready') {
-            return $copier->progress($state);
+            return $provisioner->progress($state);
         }
         $this->activate($token);
 
-        return ['status' => 'complete', 'percent' => 100, 'message' => 'Demo ready', 'redirect' => route('demo-mode.roles')];
-    }
-
-    private function migrateSandbox(string $token, array $state): array
-    {
-        $runtime = app(SandboxRuntime::class);
-        try {
-            $runtime->enter($token);
-            if (Artisan::call('migrate', ['--database' => 'demo', '--force' => true]) !== 0) {
-                throw new \RuntimeException('Demo schema creation failed.');
-            }
-        } finally {
-            $runtime->leave();
-        }
-        // Migrations can insert defaults. The sandbox must match the selected source data.
-        $demo = DB::connection('demo');
-        $demo->getSchemaBuilder()->withoutForeignKeyConstraints(fn () => $demo->transaction(function () use ($demo): void {
-            foreach ($demo->getSchemaBuilder()->getTableListing(schemaQualified: false) as $table) {
-                if ($table !== 'migrations') {
-                    $demo->table($table)->delete();
-                }
-            }
-        }));
-
-        return [...$state, 'phase' => 'copy'];
-    }
-
-    private function verifySandbox(array $state): array
-    {
-        if (DB::connection('demo')->select('PRAGMA foreign_key_check') !== []) {
-            throw new ProvisioningFailed('Demo data has missing relationships. Select the related models and try again.');
-        }
-
-        return [...$state, 'phase' => 'ready'];
+        return ['status' => 'complete', 'percent' => 100, 'message' => 'Demo ready', 'redirect' => route('demo-mode.roles'),
+            'warnings' => $state['warnings'] ?? []];
     }
 
     private function activate(string $token): void
@@ -328,10 +342,11 @@ class DemoManager
         } finally {
             $runtime->leave();
         }
-        File::delete($this->directory($token).'/provisioning.json');
+        $ref = $this->ref($token);
         // Only replace the saved sandbox after the new copy is fully provisioned.
+        $this->persistDemo(session('demo_mode'), [], $ref);
+        $this->metadata()->forgetProvisioning($token);
         $this->removeOtherSandboxes($token);
-        $this->persistDemo(session('demo_mode'), []);
     }
 
     private function sandboxTables(Connection $source, Model $sourceUser): array
@@ -383,32 +398,25 @@ class DemoManager
         return array_values(array_unique(array_diff($tables, config('demo-mode.excluded_tables'))));
     }
 
-    private function readProvisioning(string $token): ?array
-    {
-        $file = $this->directory($token).'/provisioning.json';
-        if (! File::exists($file)) {
-            return null;
-        }
-        $state = json_decode(File::get($file), true, flags: JSON_THROW_ON_ERROR);
-
-        return is_array($state) ? $state : null;
-    }
-
-    private function writeProvisioning(string $token, array $state): void
-    {
-        $file = $this->directory($token).'/provisioning.json';
-        File::replace($file, json_encode($state, JSON_THROW_ON_ERROR));
-        File::chmod($file, 0600);
-    }
-
     private function discardProvisioning(string $token): void
     {
         session()->forget('demo_mode_provisioning');
         // Never delete the saved demo, even if a stale session still references it.
-        if (Str::isUuid($token) && $token !== $this->currentToken()) {
-            DB::purge('demo');
-            File::deleteDirectory($this->directory($token));
+        if (! Str::isUuid($token) || $token === $this->currentToken()) {
+            return;
         }
+        $ref = $this->ref($token);
+        DB::purge('demo');
+        if ($ref->container !== ($this->savedDemo()['ref']['container'] ?? null)) {
+            try {
+                $this->drivers()->for($ref)->drop($ref);
+            } catch (\Throwable $exception) {
+                // The directory is still removed; demo-mode:prune drops orphaned containers later.
+                report($exception);
+            }
+        }
+        $this->metadata()->forgetProvisioning($token);
+        File::deleteDirectory($this->directory($token));
     }
 
     public function markActive(bool $active): void
@@ -425,8 +433,8 @@ class DemoManager
                 'context' => $this->contextSession(),
             ]]);
             $this->withStorageLock(function () use ($state): void {
-                if (Str::isUuid($state['token'] ?? '') && File::exists($this->directory($state['token']).'/database.sqlite')) {
-                    $this->persistDemo($state, $this->contextSession());
+                if (Str::isUuid($state['token'] ?? '') && $this->exists($state['token'])) {
+                    $this->persistDemo($state, $this->contextSession(), $this->ref($state['token']));
                 }
             });
         }
