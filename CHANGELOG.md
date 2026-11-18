@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Start Demo publishes the demo without entering it.** The starter stays on production and
+  sees a "Demo is live" notification; tagged demo users sign in to it. New **Stop Demo** action
+  and a demo status column; Restore Demo is now **Open Demo**. Reset from inside a demo still
+  moves the presenter to the new copy. `enter_on_start = true` restores the 0.1 behaviour;
+  `DemoManager::start()/begin()` accept `enter:`.
 - Demo users: tag accounts in the Demo Mode settings (or with `demoUsersUsing()`) to make
   them always sign in to the saved demo, with no access to production, role switching,
   Reset or Exit. Requires `php artisan migrate` (adds `demo_settings.users`).
