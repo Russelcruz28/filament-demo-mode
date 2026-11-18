@@ -96,6 +96,9 @@ class DoctorDemoMode extends Command
         try {
             $builder = DB::connection()->getSchemaBuilder();
             $this->check('Settings migration', $builder->hasTable('demo_settings'));
+            if (config('demo-mode.demo_users.enabled', true) && $builder->hasTable('demo_settings')) {
+                $this->check('Demo users migration', $builder->hasColumn('demo_settings', 'users'), 'Run php artisan migrate');
+            }
             if (app(MetadataStore::class) instanceof DatabaseMetadataStore) {
                 $this->check('Sandbox metadata table', $builder->hasTable(DatabaseMetadataStore::TABLE), 'Run php artisan migrate');
             }
