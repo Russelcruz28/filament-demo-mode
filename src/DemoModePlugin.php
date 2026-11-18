@@ -14,6 +14,8 @@ class DemoModePlugin implements Plugin
 
     private ?string $adapter = null;
 
+    private ?string $sandboxDriver = null;
+
     private array $callbacks = [];
 
     public static function make(): static
@@ -33,6 +35,9 @@ class DemoModePlugin implements Plugin
             config(['demo-mode.panel' => $panel->getId()]);
             if ($this->adapter) {
                 config(['demo-mode.adapter' => $this->adapter]);
+            }
+            if ($this->sandboxDriver) {
+                config(['demo-mode.sandbox.driver' => $this->sandboxDriver]);
             }
             foreach ($this->callbacks as $name => $callback) {
                 app(DemoModeOptions::class)->{$name} = $callback;
@@ -56,6 +61,14 @@ class DemoModePlugin implements Plugin
     public function adapter(string $adapter): static
     {
         $this->adapter = $adapter;
+
+        return $this;
+    }
+
+    /** Use a custom sandbox driver class, or a built-in driver key such as "pgsql-schema". */
+    public function sandboxDriver(string $driver): static
+    {
+        $this->sandboxDriver = $driver;
 
         return $this;
     }

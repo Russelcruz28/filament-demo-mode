@@ -1,8 +1,8 @@
 {
     "name": "russelcruz28/filament-demo-mode",
-    "description": "Persistent SQLite demo sandboxes, role switching, and production-data isolation for Filament",
+    "description": "Persistent demo sandboxes (PostgreSQL, MySQL/MariaDB, SQLite), role switching, and production-data isolation for Filament",
     "type": "library",
-    "keywords": ["laravel", "filament", "filament-plugin", "demo", "sandbox", "role-switching"],
+    "keywords": ["laravel", "filament", "filament-plugin", "demo", "sandbox", "role-switching", "postgresql", "mysql"],
     "license": "MIT",
     "homepage": "https://github.com/Russelcruz28/filament-demo-mode",
     "support": {
@@ -14,9 +14,9 @@
     "autoload": { "psr-4": { "DemoMode\\": "src/" } },
     "autoload-dev": { "psr-4": { "DemoMode\\Tests\\": "tests/" } },
     "require-dev": { "orchestra/testbench": "^10.0 || ^11.0", "phpunit/phpunit": "^11.5", "laravel/pint": "^1.18", "spatie/laravel-permission": "^6.0" },
-    "suggest": { "spatie/laravel-permission": "Enables automatic role discovery and switching in non-tenant Filament panels" },
+    "suggest": { "spatie/laravel-permission": "Enables automatic role discovery and switching in non-tenant Filament panels", "ext-pdo_pgsql": "Required for PostgreSQL sandboxes (pgsql-schema, pgsql-database)", "ext-pdo_mysql": "Required for MySQL/MariaDB sandboxes (mysql-database)" },
     "scripts": { "test": "vendor/bin/phpunit", "lint": "vendor/bin/pint --test", "format": "vendor/bin/pint" },
     "config": { "sort-packages": true },
     "archive": { "exclude": ["/vendor", "/composer.lock", "/.phpunit.cache", "/.env", "/.DS_Store", "/tests", "/.github", "/phpunit.xml.dist", "/pint.json"] },
-    "extra": { "laravel": { "providers": ["DemoMode\\DemoModeServiceProvider"] } }
+    "extra": { "laravel": { "providers": ["DemoMode\\DemoModeServiceProvider"], "aliases": { "DemoMode": "DemoMode\\Facades\\DemoMode" } } }
 }

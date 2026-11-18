@@ -4,6 +4,7 @@ namespace DemoMode\Resources\Pages;
 
 use DemoMode\DemoManager;
 use DemoMode\Models\DemoSetting;
+use DemoMode\ProvisioningFailed;
 use DemoMode\Resources\DemoSettingResource;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -40,7 +41,8 @@ class ListDemoSettings extends ListRecords
                     } catch (\Throwable $exception) {
                         report($exception);
                         Notification::make()->title('Demo could not start')
-                            ->body('Check the selected models and server logs, then try again.')->danger()->send();
+                            ->body($exception instanceof ProvisioningFailed ? $exception->getMessage()
+                                : 'Check the selected models and server logs, then try again.')->danger()->send();
 
                         return;
                     }

@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+- Sandbox drivers: `sqlite` (unchanged default), `pgsql-schema`, `pgsql-database` and
+  `mysql-database`, selected with `sandbox.driver` (`auto` follows the source engine) or
+  `DemoModePlugin::make()->sandboxDriver()`. Custom drivers implement `SandboxDriver`.
+- Schema sources: `migrations` (default), `dump` (Laravel schema dump) and `clone`
+  (live structure, including PostgreSQL functions, sequences, triggers and views, and
+  MySQL routines, triggers and views).
+- Provisioning phases `prepare → schema → strip → copy → finalize → verify`: foreign keys
+  are dropped and re-validated, triggers disabled or recreated, sequences reset; keyset
+  paging for composite keys; set-based copies on the same server and `COPY` streaming.
+- Source columns missing from the sandbox now fail provisioning instead of being dropped
+  silently (`sandbox.on_column_mismatch = warn` to continue).
+- Connections to the source database resolve to the sandbox while a demo is active
+  (fixes migrations that override `getConnection()`, such as Telescope's). Other
+  connections stay blocked unless listed in `connections.allow`. **Behaviour change:**
+  `DB::connection('<source name>')` now reaches the sandbox instead of throwing.
+- Runtime options: `runtime.cache = prefix`, `runtime.queue = sync`, `sandbox_bindings`,
+  Telescope/Pulse paused during demo requests, `DemoMode::active()` facade and
+  `@demomode` Blade directive.
+- Shared metadata (`metadata = database`, `demo_sandboxes` table) and locks
+  (`lock = cache | database`) for multi-server deployments. Run `php artisan migrate`.
+- `demo-mode:doctor` checks driver capabilities, privileges, the PostgreSQL dedicated
+  role and migrations, exits non-zero when the setup cannot work, and `--provision`
+  builds and drops a throwaway sandbox.
+- `demo-mode:install` publishes `sandbox.driver = auto` for new installs.
+- The recovery page also handles PostgreSQL and MySQL missing table/column errors.
+
 ## 0.1.7 - 2026-11-06
 
 - Show an actionable recovery page when a saved demo is missing a table or column, with reset and exit actions and support for Livewire and JSON requests.

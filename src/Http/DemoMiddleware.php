@@ -25,7 +25,7 @@ class DemoMiddleware
         if (! config('demo-mode.enabled') || ! $adapter->canManage($user)
             || (string) $user?->getAuthIdentifier() !== (string) ($state['owner'] ?? '')
             || ! Str::isUuid($state['token'] ?? '')
-            || ! is_file($manager->directory($state['token']).'/database.sqlite')) {
+            || ! $manager->exists($state['token'])) {
             $manager->stop(preserve: false);
 
             return redirect($adapter->destination());

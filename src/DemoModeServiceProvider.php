@@ -6,8 +6,17 @@ use DemoMode\Commands\DoctorDemoMode;
 use DemoMode\Commands\InstallDemoMode;
 use DemoMode\Commands\PruneDemos;
 use DemoMode\Contracts\ApplicationAdapter;
+use DemoMode\Contracts\LockProvider;
+use DemoMode\Contracts\MetadataStore;
 use DemoMode\Contracts\RoleSwitcher;
 use DemoMode\Http\DemoMiddleware;
+use DemoMode\Locks\CacheLock;
+use DemoMode\Locks\DatabaseLock;
+use DemoMode\Locks\FileLock;
+use DemoMode\Metadata\DatabaseMetadataStore;
+use DemoMode\Metadata\FileMetadataStore;
+use DemoMode\Sandbox\ConnectionPolicy;
+use DemoMode\Sandbox\SandboxDrivers;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -17,6 +26,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
@@ -32,6 +42,19 @@ class DemoModeServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/demo-mode.php', 'demo-mode');
         $this->app->singleton(DemoManager::class);
         $this->app->singleton(DemoModeOptions::class);
+        $this->app->singleton(SandboxRuntime::class);
+        $this->app->singleton(SandboxDrivers::class);
+        $this->app->bind(MetadataStore::class, fn () => app(match (config('demo-mode.metadata', 'file')) {
+            'database' => DatabaseMetadataStore::class,
+            'file' => FileMetadataStore::class,
+            default => config('demo-mode.metadata'),
+        }));
+        $this->app->bind(LockProvider::class, fn () => app(match (config('demo-mode.lock', 'file')) {
+            'cache' => CacheLock::class,
+            'database' => DatabaseLock::class,
+            'file' => FileLock::class,
+            default => config('demo-mode.lock'),
+        }));
         $this->app->bind(ApplicationAdapter::class, fn () => app(config('demo-mode.adapter')));
         // Database sessions must keep their original connection when the default changes.
         if (! config('session.connection')) {
@@ -42,9 +65,11 @@ class DemoModeServiceProvider extends ServiceProvider
     public function boot(Kernel $kernel): void
     {
         $this->app->make(ExceptionHandler::class)->renderable(function (QueryException $exception, Request $request) {
+            // Missing table or column: SQLite messages, PostgreSQL 42P01/42703, MySQL 42S02/42S22.
+            $missing = in_array($exception->errorInfo[0] ?? null, ['42P01', '42703', '42S02', '42S22'], true)
+                || preg_match('/no such (table|column):|has no column named/i', $exception->getPrevious()?->getMessage() ?? '');
             if ($exception->getConnectionName() !== 'demo' || ! $request->hasSession()
-                || ! $request->session()->has('demo_mode')
-                || ! preg_match('/no such (table|column):|has no column named/i', $exception->getPrevious()?->getMessage() ?? '')) {
+                || ! $request->session()->has('demo_mode') || ! $missing) {
                 return null;
             }
             $url = route('demo-mode.recovery');
@@ -78,10 +103,17 @@ class DemoModeServiceProvider extends ServiceProvider
                 'Demo mode changed. Reload this page before continuing.');
         });
 
+        // Sandbox connections carry the active token. Anything else must be explicitly allowed; this also
+        // blocks stale production connections whose name is aliased to the sandbox.
         $guardConnection = function ($connection): void {
             $connection->beforeExecuting(function ($query, $bindings, $connection): void {
-                if (app(DemoManager::class)->active() && $connection->getName() !== 'demo') {
-                    throw new \LogicException('Demo mode blocked access to a non-demo database connection.');
+                if (! app(DemoManager::class)->active()) {
+                    return;
+                }
+                $runtime = app(SandboxRuntime::class);
+                if ($connection->getConfig('demo_mode') !== $runtime->token()
+                    && $runtime->policy($connection->getName()) !== ConnectionPolicy::ALLOW) {
+                    throw new \LogicException('Demo mode blocked access to a non-demo database connection ['.$connection->getName().'].');
                 }
             });
         };
@@ -89,6 +121,7 @@ class DemoModeServiceProvider extends ServiceProvider
         foreach (DB::getConnections() as $connection) {
             $guardConnection($connection);
         }
+        Blade::if('demomode', fn (): bool => app(DemoManager::class)->active());
         Event::listen(NotificationSending::class, function ($event) {
             if (app(DemoManager::class)->active() && $event->channel !== 'database') {
                 return false;

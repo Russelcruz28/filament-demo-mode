@@ -40,6 +40,7 @@ class SpatieIntegrationTest extends TestCase
         $this->assertEqualsCanonicalizing(['roles', 'permissions', 'model_has_roles', 'model_has_permissions', 'role_has_permissions'], $adapter->requiredTables($user));
         $manager = app(DemoManager::class);
         $manager->start();
+        config(['database.connections.reporting' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
         $runtime = app(SandboxRuntime::class);
         $runtime->enter(session('demo_mode.token'));
         try {
@@ -49,8 +50,11 @@ class SpatieIntegrationTest extends TestCase
             $this->assertTrue($copied->fresh()->hasRole('office_head'));
             $this->assertFalse($copied->fresh()->hasRole('super_admin'));
             $this->assertTrue($copied->fresh()->hasPermissionTo('approve'));
+            // The source connection name resolves to the sandbox; other databases stay blocked.
+            $this->assertSame('demo', DB::connection('testing')->getName());
+            $this->assertTrue(RoleUser::on('testing')->findOrFail($user->id)->hasRole('office_head'));
             $this->expectException(\LogicException::class);
-            DB::connection('testing')->table('users')->count();
+            DB::connection('reporting')->select('select 1');
         } finally {
             $runtime->leave();
             $this->assertTrue($user->fresh()->hasRole('super_admin'));
