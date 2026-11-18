@@ -34,7 +34,10 @@ abstract class TestCase extends Orchestra
 
     protected function tearDown(): void
     {
-        File::deleteDirectory(config('demo-mode.root'));
+        // Suites skipped before boot (no database server configured) have no application.
+        if ($this->app) {
+            File::deleteDirectory(config('demo-mode.root'));
+        }
         parent::tearDown();
     }
 }
