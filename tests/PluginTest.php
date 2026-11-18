@@ -64,7 +64,7 @@ class PluginTest extends TestCase
         app(DemoModeOptions::class)->authorize = fn () => true;
         app(DemoModeOptions::class)->prepare = fn () => null;
         $manager = app(DemoManager::class);
-        $manager->start();
+        $manager->start(enter: true);
         $token = session('demo_mode.token');
         $runtime = app(SandboxRuntime::class);
         $runtime->enter($token);
@@ -86,7 +86,7 @@ class PluginTest extends TestCase
         $this->assertSame(2, DB::connection('demo')->table('widgets')->count());
         $this->assertFileDoesNotExist($manager->directory($token).'/expires_at');
         $manager->stop();
-        $manager->start();
+        $manager->start(enter: true);
         $this->assertCount(1, File::directories(config('demo-mode.root')));
         $this->assertDirectoryDoesNotExist($manager->directory($token));
     }
@@ -108,6 +108,6 @@ class PluginTest extends TestCase
         $this->assertFalse($manager->canManage());
         $this->assertFalse($manager->canRestore());
         $this->expectException(HttpException::class);
-        $manager->start();
+        $manager->start(enter: true);
     }
 }

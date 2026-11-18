@@ -17,6 +17,7 @@ use DemoMode\Metadata\DatabaseMetadataStore;
 use DemoMode\Metadata\FileMetadataStore;
 use DemoMode\Sandbox\ConnectionPolicy;
 use DemoMode\Sandbox\SandboxDrivers;
+use Filament\Notifications\Notification;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -190,7 +191,15 @@ class DemoModeServiceProvider extends ServiceProvider
                 ->name('demo-mode.provisioning');
             Route::post('/demo-mode/provisioning', function () {
                 try {
-                    return response()->json(app(DemoManager::class)->advance());
+                    $progress = app(DemoManager::class)->advance();
+                    if ($progress['status'] === 'complete' && $progress['redirect'] === null) {
+                        $users = count(app(DemoManager::class)->demoUserIds());
+                        Notification::make()->title('Demo is live')->success()
+                            ->body($users === 1 ? '1 demo user now signs in to this demo.' : "{$users} demo users now sign in to this demo.")
+                            ->send();
+                    }
+
+                    return response()->json($progress);
                 } catch (HttpExceptionInterface $exception) {
                     throw $exception;
                 } catch (\Throwable $exception) {

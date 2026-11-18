@@ -23,18 +23,21 @@ class ListDemoSettings extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('restoreDemo')->label('Restore Demo')->icon('heroicon-o-arrow-path')
+            // Look around the live demo as a presenter; demo users are unaffected.
+            Action::make('restoreDemo')->label('Open Demo')->icon('heroicon-o-eye')
                 ->color('gray')
                 ->visible(fn (): bool => app(DemoManager::class)->canRestore())
                 ->action(function (): void {
                     app(DemoManager::class)->restore();
                     $this->redirect(route('demo-mode.roles'));
                 }),
-            Action::make('startDemo')->label('Start Demo')->icon('heroicon-o-play')
-                ->modal(fn (): bool => app(DemoManager::class)->canRestore())
-                ->requiresConfirmation(fn (): bool => app(DemoManager::class)->canRestore())
-                ->modalHeading('Start a New Demo')
-                ->modalDescription('This replaces your saved demo with a fresh sandbox. Previous demo changes will no longer be restorable.')
+            Action::make('startDemo')
+                ->label(fn (): string => app(DemoManager::class)->liveDemo() ? 'Reset Demo' : 'Start Demo')
+                ->icon(fn (): string => app(DemoManager::class)->liveDemo() ? 'heroicon-o-arrow-path' : 'heroicon-o-play')
+                ->modal(fn (): bool => app(DemoManager::class)->liveDemo() !== null)
+                ->requiresConfirmation(fn (): bool => app(DemoManager::class)->liveDemo() !== null)
+                ->modalHeading('Reset the Demo')
+                ->modalDescription('This prepares a fresh copy of the selected data. Changes made in the current demo, including by demo users, are discarded once the new copy is ready. You stay on this page.')
                 ->action(function (): void {
                     try {
                         app(DemoManager::class)->begin();
@@ -46,6 +49,16 @@ class ListDemoSettings extends ListRecords
 
                         return;
                     }
+                    $this->redirect(static::getUrl());
+                }),
+            Action::make('stopDemo')->label('Stop Demo')->icon('heroicon-o-stop')->color('danger')
+                ->visible(fn (): bool => app(DemoManager::class)->liveDemo() !== null)
+                ->requiresConfirmation()
+                ->modalHeading('Stop the Demo')
+                ->modalDescription('The demo and every change made in it are deleted. Demo users are signed out on their next request until a new demo is started.')
+                ->action(function (): void {
+                    app(DemoManager::class)->end();
+                    Notification::make()->title('Demo stopped')->success()->send();
                     $this->redirect(static::getUrl());
                 }),
         ];

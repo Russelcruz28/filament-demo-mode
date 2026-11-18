@@ -32,7 +32,7 @@ class ProvisioningTest extends TestCase
     private function demoWidgetNames(): array
     {
         $manager = app(DemoManager::class);
-        $manager->configure(session('demo_mode.token'));
+        $manager->configure($manager->currentToken());
 
         return DB::connection('demo')->table('widgets')->orderBy('id')->pluck('name')->all();
     }
@@ -41,7 +41,7 @@ class ProvisioningTest extends TestCase
     {
         $this->createWidgets(7);
 
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         $this->assertSame(Widget::orderBy('id')->pluck('name')->all(), $this->demoWidgetNames());
     }
@@ -64,8 +64,12 @@ class ProvisioningTest extends TestCase
         $this->assertContains('Copying widgets (2 of 5 rows)', array_column($steps, 'message'));
         $this->assertSame('complete', $progress['status']);
         $this->assertSame(100, $progress['percent']);
-        $this->assertSame(route('demo-mode.roles'), $progress['redirect']);
-        $this->assertSame($token, session('demo_mode.token'));
+        // The demo goes live for demo users; the starter stays on production.
+        $this->assertSame('Demo is live', $progress['message']);
+        $this->assertNull($progress['redirect']);
+        $this->assertFalse(session()->has('demo_mode'));
+        $this->assertSame($token, $manager->currentToken());
+        $this->assertNotNull($manager->liveDemo());
         $this->assertFalse(session()->has('demo_mode_provisioning'));
         $this->assertFileDoesNotExist($manager->directory($token).'/provisioning.json');
         $this->assertCount(5, $this->demoWidgetNames());
@@ -75,7 +79,7 @@ class ProvisioningTest extends TestCase
     {
         $this->createWidgets(3);
         $manager = app(DemoManager::class);
-        $manager->start();
+        $manager->start(enter: true);
         $saved = session('demo_mode.token');
         $manager->stop();
 
@@ -104,8 +108,9 @@ class ProvisioningTest extends TestCase
             }
         }
 
-        $response->assertJson(['status' => 'complete', 'redirect' => route('demo-mode.roles')]);
-        $this->assertTrue(session()->has('demo_mode'));
+        $response->assertJson(['status' => 'complete', 'redirect' => null, 'message' => 'Demo is live']);
+        $this->assertFalse(session()->has('demo_mode'));
+        $this->assertNotNull(app(DemoManager::class)->currentToken());
     }
 
     public function test_progress_routes_without_pending_demo_are_rejected(): void

@@ -23,6 +23,11 @@ class FileMetadataStore implements MetadataStore
         $this->write(config('demo-mode.root').'/current.json', $saved);
     }
 
+    public function forgetCurrent(): void
+    {
+        File::delete(config('demo-mode.root').'/current.json');
+    }
+
     public function provisioning(string $token): ?array
     {
         return $this->read($this->path($token));

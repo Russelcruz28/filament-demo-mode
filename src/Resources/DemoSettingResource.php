@@ -15,6 +15,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 class DemoSettingResource extends Resource
 {
@@ -133,6 +134,17 @@ class DemoSettingResource extends Resource
             TextColumn::make('id')->label('Configuration')->formatStateUsing(fn () => 'Demo Mode'),
             TextColumn::make('model_count')->label('Selected models')->state(fn ($record) => count($record->models ?? [])),
             TextColumn::make('user_count')->label('Demo users')->state(fn ($record) => count($record->users ?? [])),
+            TextColumn::make('demo_status')->label('Demo')->badge()
+                ->state(function (): string {
+                    $demo = app(DemoManager::class)->liveDemo();
+
+                    return match (true) {
+                        $demo === null => 'Not started',
+                        filled($demo['started_at']) => 'Live since '.Carbon::parse($demo['started_at'])->diffForHumans(),
+                        default => 'Live',
+                    };
+                })
+                ->color(fn (string $state): string => $state === 'Not started' ? 'gray' : 'success'),
             TextColumn::make('updated_at')->label('Updated')->dateTime(),
         ])->recordActions([EditAction::make()]);
     }

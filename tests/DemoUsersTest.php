@@ -29,16 +29,15 @@ class DemoUsersTest extends TestCase
         Route::middleware('web')->post('/probe', fn () => Widget::create(['name' => 'Demo only']));
     }
 
-    /** A presenter prepares the saved demo, then exits. */
+    /** An administrator starts the demo; it goes live without them entering it. */
     private function prepareDemo(): string
     {
         auth()->login($this->presenter);
         app(DemoManager::class)->start();
-        $token = session('demo_mode.token');
-        app(DemoManager::class)->stop();
+        $this->assertFalse(session()->has('demo_mode'));
         auth()->logout();
 
-        return $token;
+        return app(DemoManager::class)->currentToken();
     }
 
     private function tag(User ...$users): void
@@ -171,5 +170,48 @@ class DemoUsersTest extends TestCase
         auth()->login($visitor);
 
         $this->get('/probe')->assertJson(['connection' => 'testing']);
+    }
+
+    public function test_stopping_the_demo_signs_demo_users_out(): void
+    {
+        $visitor = User::create(['name' => 'Visitor']);
+        $token = $this->prepareDemo();
+        $this->tag($visitor);
+        auth()->login($visitor);
+        $this->get('/probe')->assertJson(['connection' => 'demo']);
+
+        auth()->login($this->presenter);
+        app(DemoManager::class)->end();
+        auth()->login($visitor);
+
+        $this->assertNull(app(DemoManager::class)->liveDemo());
+        $this->assertDirectoryDoesNotExist(app(DemoManager::class)->directory($token));
+        $this->get('/probe')->assertRedirect(route('demo-mode.unavailable'));
+        $this->assertGuest();
+        $this->assertSame(1, Widget::count());
+    }
+
+    public function test_starter_can_still_choose_to_enter_the_demo(): void
+    {
+        auth()->login($this->presenter);
+        config(['demo-mode.enter_on_start' => true]);
+
+        app(DemoManager::class)->start();
+
+        $this->assertSame(app(DemoManager::class)->currentToken(), session('demo_mode.token'));
+        $this->get('/probe')->assertJson(['connection' => 'demo', 'user' => 'Presenter']);
+    }
+
+    public function test_reset_from_inside_the_demo_moves_the_presenter_to_the_new_demo(): void
+    {
+        auth()->login($this->presenter);
+        $manager = app(DemoManager::class);
+        $manager->start(enter: true);
+        $old = session('demo_mode.token');
+
+        $manager->start();
+
+        $this->assertNotSame($old, session('demo_mode.token'));
+        $this->assertSame($manager->currentToken(), session('demo_mode.token'));
     }
 }

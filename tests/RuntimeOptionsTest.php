@@ -20,7 +20,7 @@ class RuntimeOptionsTest extends TestCase
         $this->actingAs(User::create(['name' => 'Presenter']));
         app(DemoModeOptions::class)->authorize = fn () => true;
         app(DemoModeOptions::class)->prepare = fn () => null;
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
 
         return session('demo_mode.token');
     }

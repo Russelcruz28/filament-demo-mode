@@ -60,15 +60,24 @@ role chooser needs no changes.
 
 ## Demo Users
 
-Tag accounts under **Demo Mode → Demo users** (for example a prospect, trainer or
-reviewer account). A tagged user who signs in always works in the saved demo:
+1. Tag accounts under **Demo Mode → Demo users** (for example a prospect, trainer or
+   reviewer account) and choose the starting data.
+2. Click **Start Demo**. The copy is prepared in a progress modal on the same page;
+   when it finishes the demo is live and you stay on production. Nobody is redirected.
+3. Tagged users who sign in now work in that demo.
+
+The **Demo Mode** page shows whether a demo is live. **Reset Demo** replaces it with a
+fresh copy (demo users move to it when it is ready), **Stop Demo** deletes it and signs
+demo users out, and **Open Demo** lets you look around inside it as a presenter.
+Set `enter_on_start` to `true` to enter the demo yourself after starting, as in 0.1.
+
+A tagged user who signs in always works in the live demo:
 
 - Every web request runs in the sandbox, on any panel or route; production data is never served.
 - They keep the roles their account has in the copy; role switching, Reset and Exit are
   unavailable. The banner offers **Sign out**.
-- They join the demo a presenter prepared (Start Demo) and follow it after a Reset.
-  Several demo users share it.
-- If no demo is ready, or the account was created after the demo was prepared, they are
+- They join the live demo and follow it after a Reset. Several demo users share it.
+- If no demo is live, or the account was created after the demo was prepared, they are
   signed out with an explanation. Reset the demo to include new accounts.
 - Users who can manage Demo Mode are never forced in, so nobody can lock themselves out.
 
@@ -242,15 +251,18 @@ table), reports column mismatches and relationship problems, then drops it.
 
 ## Persistence
 
-One current sandbox is retained per installation. Exit preserves its database,
-uploads and context. Restore requires the same authorized owner and works after
-logout or browser-session loss. There is no expiry or scheduled cleanup.
-Successful Start/Reset replaces the saved sandbox, including copies used by
-other browsers. Failed provisioning preserves the previous copy.
+One current (live) sandbox is retained per installation. Start publishes it without
+moving the starter into it; Open Demo enters it as a presenter, and Exit preserves its
+database, uploads and context. Open Demo requires the same authorized owner and works
+after logout or browser-session loss. There is no expiry or scheduled cleanup; Stop Demo
+deletes it. Successful Start/Reset replaces the live sandbox, including copies used by
+other browsers and demo users. Failed provisioning preserves the previous copy. A Reset
+started from inside the demo (banner or recovery page) moves the presenter to the new copy.
 
 Start/Reset shows a progress modal on the current panel page that copies tables in
 resumable batches, one
-short request at a time, so large datasets do not hit request timeouts. Presenters
+short request at a time, so large datasets do not hit request timeouts. The modal resumes
+on any panel page if you navigate away. You
 can cancel while copying; cancelled or failed copies are discarded.
 
 SQLite sandboxes live in `<root>/<uuid>/database.sqlite`; server-side sandboxes in a

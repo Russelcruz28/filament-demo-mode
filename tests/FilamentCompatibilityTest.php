@@ -17,6 +17,7 @@ use Filament\Actions\ActionsServiceProvider;
 use Filament\Facades\Filament;
 use Filament\Forms\FormsServiceProvider;
 use Filament\Infolists\InfolistsServiceProvider;
+use Filament\Notifications\Notification;
 use Filament\Notifications\NotificationsServiceProvider;
 use Filament\Schemas\SchemasServiceProvider;
 use Filament\Support\SupportServiceProvider;
@@ -134,7 +135,7 @@ class FilamentCompatibilityTest extends TestCase
     public function test_demo_user_banner_offers_only_sign_out(): void
     {
         app(DemoModeOptions::class)->prepare = fn () => null;
-        app(DemoManager::class)->start();
+        app(DemoManager::class)->start(enter: true);
         $token = session('demo_mode.token');
         session(['demo_mode' => ['token' => $token, 'owner' => null, 'visitor' => true, 'user' => (string) auth()->id()]]);
         $runtime = app(SandboxRuntime::class);
@@ -148,5 +149,27 @@ class FilamentCompatibilityTest extends TestCase
         $this->assertStringContainsString('Sign out', $banner);
         $this->assertStringNotContainsString('Switch role', $banner);
         $this->assertStringNotContainsString('Reset demo', $banner);
+    }
+
+    public function test_start_publishes_the_demo_without_entering_it_and_stop_removes_it(): void
+    {
+        app(DemoModeOptions::class)->prepare = fn () => null;
+        Livewire::test(ListDemoSettings::class)
+            ->assertActionHasLabel('startDemo', 'Start Demo')
+            ->assertActionHidden('stopDemo')
+            ->callAction('startDemo');
+        do {
+            $response = $this->postJson(route('demo-mode.provisioning.step'))->assertOk();
+        } while ($response->json('status') === 'running');
+
+        $response->assertJson(['status' => 'complete', 'redirect' => null]);
+        $this->assertFalse(session()->has('demo_mode'));
+        Notification::assertNotified('Demo is live');
+        Livewire::test(ListDemoSettings::class)
+            ->assertActionHasLabel('startDemo', 'Reset Demo')
+            ->assertActionVisible('restoreDemo')
+            ->callAction('stopDemo');
+
+        $this->assertNull(app(DemoManager::class)->liveDemo());
     }
 }
