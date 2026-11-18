@@ -150,6 +150,36 @@ class DemoManager
         return $this->drivers()->for($ref)->exists($ref);
     }
 
+    /** The demo tagged users work in, if one has been started and still exists. */
+    public function liveDemo(): ?array
+    {
+        $saved = $this->savedDemo();
+        if (! is_array($saved) || ! Str::isUuid($saved['token'] ?? '') || ! $this->exists($saved['token'])) {
+            return null;
+        }
+
+        return ['token' => $saved['token'], 'owner' => $saved['owner'] ?? null, 'started_at' => $saved['started_at'] ?? null];
+    }
+
+    /**
+     * Stop the live demo: its sandbox is removed, demo users are signed out on their next request
+     * and presenters inside it return to production.
+     */
+    public function end(): void
+    {
+        abort_unless($this->canManage(), 403);
+        $this->withStorageLock(function (): void {
+            if (($token = $this->currentToken()) !== null) {
+                $ref = $this->ref($token);
+                DB::purge('demo');
+                $this->drivers()->for($ref)->drop($ref);
+                File::deleteDirectory($this->directory($token));
+            }
+            $this->metadata()->forgetCurrent();
+            session()->forget('demo_mode_saved');
+        });
+    }
+
     public function currentToken(): ?string
     {
         $token = $this->savedDemo()['token'] ?? null;
@@ -159,8 +189,10 @@ class DemoManager
 
     private function persistDemo(array $state, array $context, SandboxRef $ref): void
     {
+        $saved = $this->savedDemo();
         $this->metadata()->setCurrent([
             'token' => $state['token'], 'owner' => $state['owner'], 'context' => $context, 'ref' => $ref->toArray(),
+            'started_at' => ($saved['token'] ?? null) === $state['token'] ? ($saved['started_at'] ?? null) : now()->toIso8601String(),
         ]);
         File::delete($this->directory($state['token']).'/expires_at');
     }
@@ -228,18 +260,23 @@ class DemoManager
     /**
      * Provision a new sandbox in one call. Web requests use begin() and advance() to avoid timeouts.
      */
-    public function start(): void
+    public function start(?bool $enter = null): void
     {
-        $this->begin();
+        $this->begin($enter);
         while ($this->advance()['status'] !== 'complete') {
             // Each step copies one time-boxed batch.
         }
     }
 
-    public function begin(): void
+    /**
+     * Start provisioning a new demo. By default the demo is published for demo users and the starter
+     * stays where they are; a presenter who resets from inside a demo is moved into the new one.
+     */
+    public function begin(?bool $enter = null): void
     {
         abort_unless($this->canManage(), 403);
-        $this->withStorageLock(function (): void {
+        $enter ??= (bool) config('demo-mode.enter_on_start', false) || session()->has('demo_mode');
+        $this->withStorageLock(function () use ($enter): void {
             if (is_string($pending = session('demo_mode_provisioning'))) {
                 $this->discardProvisioning($pending);
             }
@@ -258,7 +295,7 @@ class DemoManager
             File::ensureDirectoryExists($this->directory($token), 0700);
             $ref = $driver->ref($token, (string) Auth::id(), $source);
             $this->metadata()->saveProvisioning($token, [
-                ...$this->provisioner()->state($ref, $source, $tables), 'owner' => Auth::id(),
+                ...$this->provisioner()->state($ref, $source, $tables), 'owner' => Auth::id(), 'enter' => $enter,
             ]);
             session(['demo_mode_provisioning' => $token]);
         });
@@ -361,37 +398,44 @@ class DemoManager
         if ($state['phase'] !== 'ready') {
             return $provisioner->progress($state);
         }
-        $this->activate($token);
+        // States saved before background starts existed always entered the demo.
+        $enter = (bool) ($state['enter'] ?? true);
+        $this->activate($token, $enter);
 
-        return ['status' => 'complete', 'percent' => 100, 'message' => 'Demo ready', 'redirect' => route('demo-mode.roles'),
-            'warnings' => $state['warnings'] ?? []];
+        return ['status' => 'complete', 'percent' => 100, 'message' => $enter ? 'Demo ready' : 'Demo is live',
+            'redirect' => $enter ? route('demo-mode.roles') : null, 'warnings' => $state['warnings'] ?? []];
     }
 
-    private function activate(string $token): void
+    private function activate(string $token, bool $enter = true): void
     {
         $userId = Auth::id();
         $userClass = Auth::user()::class;
         $runtime = app(SandboxRuntime::class);
         try {
             $runtime->enter($token);
+            // Prepared even when not entering, so the starter can open the demo later.
             $demoUser = $userClass::on('demo')->findOrFail($userId);
             app(ApplicationAdapter::class)->prepare($demoUser);
-            $originalSession = session('demo_mode.original_session', $this->contextSession());
-            foreach (array_keys($this->contextSession()) as $key) {
-                session()->forget($key);
+            if ($enter) {
+                $originalSession = session('demo_mode.original_session', $this->contextSession());
+                foreach (array_keys($this->contextSession()) as $key) {
+                    session()->forget($key);
+                }
+                session(['demo_mode' => ['token' => $token, 'owner' => $userId,
+                    'original_session' => $originalSession,
+                ]]);
+                session()->forget(['demo_mode_saved', 'demo_mode_provisioning']);
+                app(ApplicationAdapter::class)->clearContext();
+                session()->regenerate();
+            } else {
+                session()->forget(['demo_mode_saved', 'demo_mode_provisioning']);
             }
-            session(['demo_mode' => ['token' => $token, 'owner' => $userId,
-                'original_session' => $originalSession,
-            ]]);
-            session()->forget(['demo_mode_saved', 'demo_mode_provisioning']);
-            app(ApplicationAdapter::class)->clearContext();
-            session()->regenerate();
         } finally {
             $runtime->leave();
         }
         $ref = $this->ref($token);
         // Only replace the saved sandbox after the new copy is fully provisioned.
-        $this->persistDemo(session('demo_mode'), [], $ref);
+        $this->persistDemo($enter ? session('demo_mode') : ['token' => $token, 'owner' => $userId], [], $ref);
         $this->metadata()->forgetProvisioning($token);
         $this->removeOtherSandboxes($token);
     }
