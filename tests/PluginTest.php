@@ -7,10 +7,12 @@ use DemoMode\Contracts\ApplicationAdapter;
 use DemoMode\DemoManager;
 use DemoMode\DemoModeOptions;
 use DemoMode\DemoModePlugin;
+use DemoMode\Http\DemoMiddleware;
 use DemoMode\SandboxRuntime;
 use DemoMode\Tests\Fixtures\User;
 use DemoMode\Tests\Fixtures\Widget;
 use Filament\Panel;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -46,6 +48,20 @@ class PluginTest extends TestCase
         DemoModePlugin::make()->management(false)->authorizeUsing(fn () => false)->register(Panel::make()->id('app'));
         $this->assertSame('admin', config('demo-mode.panel'));
         $this->assertTrue(app(ApplicationAdapter::class)->canManage(new User));
+    }
+
+    public function test_demo_mode_is_limited_to_panels_that_register_the_plugin(): void
+    {
+        $hooks = new \ReflectionProperty(Panel::class, 'renderHooks');
+        $admin = Panel::make()->id('admin');
+        $other = Panel::make()->id('customer');
+        DemoModePlugin::make()->register($admin);
+
+        $this->assertContains(DemoMiddleware::class, $admin->getMiddleware());
+        $this->assertArrayHasKey(PanelsRenderHook::BODY_START, $hooks->getValue($admin));
+        $this->assertArrayHasKey(PanelsRenderHook::USER_MENU_BEFORE, $hooks->getValue($admin));
+        $this->assertNotContains(DemoMiddleware::class, $other->getMiddleware());
+        $this->assertSame([], $hooks->getValue($other));
     }
 
     public function test_unknown_role_is_rejected_before_callback(): void

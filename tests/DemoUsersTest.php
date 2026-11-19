@@ -4,9 +4,11 @@ namespace DemoMode\Tests;
 
 use DemoMode\DemoManager;
 use DemoMode\DemoModeOptions;
+use DemoMode\Http\DemoScope;
 use DemoMode\Models\DemoSetting;
 use DemoMode\Tests\Fixtures\User;
 use DemoMode\Tests\Fixtures\Widget;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -23,10 +25,12 @@ class DemoUsersTest extends TestCase
         app(DemoModeOptions::class)->exit = fn () => '/login';
         $this->presenter = User::create(['name' => 'Presenter']);
         Widget::create(['name' => 'Production']);
-        Route::middleware('web')->get('/probe', fn () => [
+        Route::middleware(['web', 'demo-mode'])->get('/probe', fn () => [
             'connection' => DB::getDefaultConnection(), 'user' => auth()->user()?->name, 'widgets' => Widget::count(),
         ]);
-        Route::middleware('web')->post('/probe', fn () => Widget::create(['name' => 'Demo only']));
+        Route::middleware(['web', 'demo-mode'])->post('/probe', fn () => Widget::create(['name' => 'Demo only']));
+        // A page outside the demo panels, e.g. another panel or the public site.
+        Route::middleware('web')->get('/elsewhere', fn () => ['connection' => DB::getDefaultConnection()]);
     }
 
     /** An administrator starts the demo; it goes live without them entering it. */
@@ -257,5 +261,47 @@ class DemoUsersTest extends TestCase
         $manager->end();
         $this->get('/probe')->assertRedirect();
         $this->assertSame('ended', session('demo_mode_notice'));
+    }
+
+    public function test_presenters_use_live_data_outside_the_demo_panels(): void
+    {
+        auth()->login($this->presenter);
+        app(DemoManager::class)->start(enter: true);
+
+        $this->get('/probe')->assertJson(['connection' => 'demo', 'widgets' => 1]);
+        $this->get('/elsewhere')->assertJson(['connection' => 'testing']);
+
+        $this->assertTrue(session()->has('demo_mode'));
+        $this->get('/probe')->assertJson(['connection' => 'demo']);
+    }
+
+    public function test_demo_users_never_reach_live_data_outside_the_demo_panels(): void
+    {
+        $visitor = User::create(['name' => 'Visitor']);
+        $this->prepareDemo();
+        $this->tag($visitor);
+        auth()->login($visitor);
+
+        // Without a registered demo panel there is nowhere to send them.
+        $this->get('/elsewhere')->assertForbidden();
+        $this->get('/probe')->assertJson(['connection' => 'demo', 'user' => 'Visitor']);
+    }
+
+    public function test_livewire_updates_follow_the_page_that_rendered_the_component(): void
+    {
+        $scope = app(DemoScope::class);
+        $update = function (string $path) {
+            $request = Request::create('/livewire/update', 'POST', ['components' => [
+                ['snapshot' => json_encode(['memo' => ['path' => $path, 'method' => 'GET']])],
+            ]]);
+            $route = app('router')->getRoutes()->getByName('default-livewire.update');
+            $request->setRouteResolver(fn () => $route);
+
+            return $request;
+        };
+
+        $this->assertTrue($scope->covers($update('probe')));
+        $this->assertFalse($scope->covers($update('elsewhere')));
+        $this->assertFalse($scope->covers($update('missing')));
     }
 }

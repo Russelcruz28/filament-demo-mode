@@ -13,6 +13,7 @@ use DemoMode\Resources\Pages\ListDemoSettings;
 use DemoMode\SandboxRuntime;
 use DemoMode\Tests\Fixtures\User;
 use DemoMode\Tests\Fixtures\Widget;
+use DemoMode\Tests\Fixtures\WidgetResource;
 use Filament\Actions\ActionsServiceProvider;
 use Filament\Facades\Filament;
 use Filament\Forms\FormsServiceProvider;
@@ -23,6 +24,7 @@ use Filament\Schemas\SchemasServiceProvider;
 use Filament\Support\SupportServiceProvider;
 use Filament\Tables\TablesServiceProvider;
 use Filament\Widgets\WidgetsServiceProvider;
+use Illuminate\Support\Facades\Route;
 use Livewire\Livewire;
 
 class FilamentCompatibilityTest extends TestCase
@@ -73,7 +75,7 @@ class FilamentCompatibilityTest extends TestCase
 
         Livewire::test(EditDemoSetting::class, ['record' => $setting->getRouteKey()])
             ->assertSuccessful()
-            ->fillForm(['models' => []])
+            ->fillForm(['model_groups' => ['general' => []]])
             ->call('save')
             ->assertHasNoFormErrors();
 
@@ -99,7 +101,7 @@ class FilamentCompatibilityTest extends TestCase
         $setting = DemoSetting::create(['models' => [Widget::class, 'App\\Models\\RemovedModel']]);
 
         Livewire::test(EditDemoSetting::class, ['record' => $setting->getRouteKey()])
-            ->assertSchemaStateSet(['models' => [Widget::class]])
+            ->assertSchemaStateSet(['model_groups' => ['general' => [Widget::class]]])
             ->call('save')
             ->assertHasNoFormErrors();
 
@@ -219,5 +221,41 @@ class FilamentCompatibilityTest extends TestCase
         config(['demo-mode.notices' => false]);
         app(DemoManager::class)->notice('exited');
         $this->assertSame('', trim(view('demo-mode::banner')->render()));
+    }
+
+    public function test_demo_users_outside_the_demo_panel_are_sent_back_to_it(): void
+    {
+        app(DemoModeOptions::class)->prepare = fn () => null;
+        app(DemoManager::class)->start();
+        $visitor = User::create(['name' => 'Visitor']);
+        DemoSetting::query()->updateOrCreate(['id' => 1], ['users' => [(string) $visitor->id]]);
+        app(DemoModeOptions::class)->authorize = fn ($user) => $user->name === 'Presenter';
+        Route::middleware('web')->get('/customer-portal', fn () => 'live data');
+        $this->actingAs($visitor);
+
+        $this->get('/customer-portal')->assertRedirect(Filament::getPanel('admin')->getUrl());
+    }
+
+    public function test_models_are_grouped_by_navigation_group_in_panel_order(): void
+    {
+        config(['demo-mode.models' => [Widget::class, User::class]]);
+        Filament::getPanel('admin')->resources([WidgetResource::class]);
+
+        $this->assertSame(['Inventory' => [Widget::class => 'Widget'], 'General' => [User::class => 'User']],
+            app(DemoManager::class)->modelGroups());
+
+        app(DemoModeOptions::class)->modelGroup = fn (string $class) => $class === User::class ? 'People' : null;
+        Filament::getPanel('admin')->navigationGroups(['People', 'Inventory']);
+        $this->assertSame(['People', 'Inventory'], array_keys(app(DemoManager::class)->modelGroups()));
+
+        $setting = DemoSetting::create(['models' => [Widget::class]]);
+        Livewire::test(EditDemoSetting::class, ['record' => $setting->getRouteKey()])
+            ->assertSchemaStateSet(['model_groups' => ['people' => [], 'inventory' => [Widget::class]]])
+            ->assertSee(['Starting data', 'Inventory', 'People', 'widgets'])
+            ->fillForm(['model_groups' => ['people' => [User::class], 'inventory' => [Widget::class]]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame([User::class, Widget::class], $setting->fresh()->models);
     }
 }

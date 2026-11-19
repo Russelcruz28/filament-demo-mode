@@ -17,8 +17,8 @@ class RecoveryTest extends TestCase
         app(DemoModeOptions::class)->authorize = fn () => true;
         app(DemoModeOptions::class)->prepare = fn () => null;
         app(DemoManager::class)->start(enter: true);
-        Route::middleware('web')->get('/missing-demo-table', fn () => DB::table('new_table')->get());
-        Route::middleware('web')->get('/missing-demo-column', fn () => DB::table('widgets')->select('widgets.new_column')->get());
+        Route::middleware(['web', 'demo-mode'])->get('/missing-demo-table', fn () => DB::table('new_table')->get());
+        Route::middleware(['web', 'demo-mode'])->get('/missing-demo-column', fn () => DB::table('widgets')->select('widgets.new_column')->get());
 
         return session('demo_mode.token');
     }
