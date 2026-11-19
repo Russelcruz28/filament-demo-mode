@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Demo mode is limited to the panels that register `DemoModePlugin`** (normally the admin
+  panel). Other panels and non-panel routes now always serve live data, and the demo bar,
+  **Demo** badge and progress modal only render on demo panels. Before this change, Livewire
+  actions on any panel ran in the demo while page loads on those panels did not. Livewire
+  updates, uploads and Filament export/import downloads follow the page that called them.
+  Demo users who open a page outside the demo panels are redirected to the demo panel.
+  Other routes can opt in with the `demo-mode` middleware.
+- The **Starting data** model list is grouped by the navigation group of the resource that
+  manages each model, then by sub-namespace (`App\Models\Inventory\*`), then **General**,
+  in the panel's navigation-group order. Each group can be collapsed, toggled as a whole and
+  shows table names. Customise the grouping with `groupModelsUsing()`.
 - Top bar explains demo mode: a permanent amber bar and **Demo** badge in the panel top bar
   while in the demo, a `[Demo]` tab-title prefix, and one-time messages when entering,
   being reset, leaving, losing demo access or the demo being stopped (`notices`).

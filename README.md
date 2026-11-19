@@ -73,7 +73,8 @@ Set `enter_on_start` to `true` to enter the demo yourself after starting, as in 
 
 A tagged user who signs in always works in the live demo:
 
-- Every web request runs in the sandbox, on any panel or route; production data is never served.
+- Every request on a demo panel runs in the sandbox. Pages outside the demo panels redirect
+  them to the demo panel, so production data is never served (see [Where Demo Mode Runs](#where-demo-mode-runs)).
 - They keep the roles their account has in the copy; role switching, Reset and Exit are
   unavailable. The banner offers **Sign out**.
 - They join the live demo and follow it after a Reset. Several demo users share it.
@@ -87,6 +88,17 @@ Tag by rule instead of (or as well as) by selection:
 DemoModePlugin::make()->demoUsersUsing(fn ($user) => $user->hasRole('prospect'))
 ```
 
+**Starting data** groups the selectable models by the navigation group of the resource that
+manages them, in the panel's navigation-group order. A model without a grouped resource is
+grouped by its sub-namespace (`App\Models\Inventory\Item` goes under **Inventory**), and
+anything left goes under **General**. To group models differently:
+
+```php
+DemoModePlugin::make()->groupModelsUsing(fn (string $model) => str_contains($model, 'Billing') ? 'Billing' : null)
+```
+
+Return `null` to keep the default grouping for that model.
+
 Run `php artisan migrate` after upgrading (adds `demo_settings.users`). Set
 `demo_users.enabled` to `false` to turn the feature off; `demo_users.search_columns`
 controls the user search in the form. API routes outside the `web` middleware group
@@ -94,7 +106,7 @@ are not redirected, so do not issue API tokens to demo users.
 
 ## Knowing Whether You Are in the Demo
 
-Panels show a bar across the top of every page:
+Demo panels show a bar across the top of every page:
 
 - **In the demo** (amber): "Demo mode — you are using a practice copy. Changes here do not
   affect real data", with Sign out for demo users or Switch role / Reset / Exit for presenters.
@@ -144,9 +156,23 @@ Complex applications can implement `ApplicationAdapter` and `RoleSwitcher` in
 Application-specific models and policies remain in your adapter, not in this
 package.
 
-Use exactly one management panel. Register
-`DemoModePlugin::make()->management(false)` on other panels to retain middleware
-without adding another resource or replacing management configuration.
+## Where Demo Mode Runs
+
+Demo mode runs only on panels that register `DemoModePlugin`, which is normally your admin
+panel. On those panels the presenter's demo, the amber bar, the **Demo** badge and the
+progress modal are active. All other panels and routes behave as if the package were not
+installed and always serve live data, even while a presenter is in the demo.
+
+- Livewire updates, file uploads and Filament export/import downloads follow the page that
+  made the request, so a demo panel's actions run in the demo and other panels' actions do not.
+- Tagged demo users who open a page outside the demo panels are redirected to the management
+  panel. If no management panel is registered, they get a 403 response.
+- A non-panel route can join the demo with the `demo-mode` middleware:
+  `Route::middleware(['web', 'demo-mode'])->get(...)`.
+
+Use exactly one management panel. To enable demo mode on another panel as well, register
+`DemoModePlugin::make()->management(false)` there. This adds the demo middleware and
+indicators without adding another resource or replacing the management configuration.
 
 ## Sandbox Drivers
 
