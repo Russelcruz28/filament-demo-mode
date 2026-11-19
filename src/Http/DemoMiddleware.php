@@ -6,6 +6,7 @@ use Closure;
 use DemoMode\Contracts\ApplicationAdapter;
 use DemoMode\DemoManager;
 use DemoMode\SandboxRuntime;
+use Filament\Facades\Filament;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -22,8 +23,14 @@ class DemoMiddleware
         }
         $state = $request->session()->get('demo_mode');
         $user = Auth::user();
+        $inScope = app(DemoScope::class)->covers($request);
         if ($user !== null && $manager->isDemoUser($user)) {
-            return $this->demoUser($request, $next, $manager, $user);
+            // Demo users never reach live data: outside the demo panels they are sent back to the demo.
+            return $inScope ? $this->demoUser($request, $next, $manager, $user) : $this->toDemoPanel($request);
+        }
+        // Other panels and routes are not part of demo mode and keep serving live data.
+        if (! $inScope) {
+            return $next($request);
         }
         if ($state['visitor'] ?? false) {
             // No longer tagged: the user is back on production from this request on.
@@ -98,7 +105,20 @@ class DemoMiddleware
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         $request->session()->flash('demo_mode_unavailable', $message);
-        $url = route('demo-mode.unavailable');
+
+        return $this->redirectTo($request, route('demo-mode.unavailable'), $message);
+    }
+
+    private function toDemoPanel(Request $request): Response
+    {
+        $panel = Filament::getPanels()[config('demo-mode.panel')] ?? null;
+        abort_if($panel === null, 403, 'Demo users can only use the demo.');
+
+        return $this->redirectTo($request, $panel->getUrl() ?? url($panel->getPath()), 'Demo users can only use the demo.');
+    }
+
+    private function redirectTo(Request $request, string $url, string $message): Response
+    {
         if ($request->hasHeader('X-Livewire')) {
             return response()->json(['components' => array_map(
                 fn ($component) => ['snapshot' => $component['snapshot'] ?? null, 'effects' => ['redirect' => $url]],
