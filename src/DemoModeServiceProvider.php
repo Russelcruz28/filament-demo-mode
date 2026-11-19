@@ -18,8 +18,6 @@ use DemoMode\Metadata\FileMetadataStore;
 use DemoMode\Sandbox\ConnectionPolicy;
 use DemoMode\Sandbox\SandboxDrivers;
 use Filament\Notifications\Notification;
-use Filament\Support\Facades\FilamentView;
-use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Database\Events\ConnectionEstablished;
@@ -94,6 +92,9 @@ class DemoModeServiceProvider extends ServiceProvider
         }
         $this->publishes([__DIR__.'/../config/demo-mode.php' => config_path('demo-mode.php')], 'demo-mode-config');
         $this->publishes([__DIR__.'/../resources/views' => resource_path('views/vendor/demo-mode')], 'demo-mode-views');
+        // Demo panels attach the middleware themselves (DemoModePlugin). The `web` copy only acts on routes
+        // that opt in and on endpoints those panels share, such as Livewire updates; see DemoScope.
+        $this->app['router']->aliasMiddleware('demo-mode', DemoMiddleware::class);
         $kernel->appendMiddlewareToGroup('web', DemoMiddleware::class);
         $kernel->addToMiddlewarePriorityAfter(StartSession::class, DemoMiddleware::class);
         Livewire::addPersistentMiddleware([DemoMiddleware::class]);
@@ -217,18 +218,5 @@ class DemoModeServiceProvider extends ServiceProvider
                 return redirect(app(ApplicationAdapter::class)->destination());
             })->name('demo-mode.provisioning.cancel');
         });
-
-        FilamentView::registerRenderHook(
-            PanelsRenderHook::BODY_START,
-            fn () => view('demo-mode::banner'),
-        );
-        FilamentView::registerRenderHook(
-            PanelsRenderHook::USER_MENU_BEFORE,
-            fn () => view('demo-mode::topbar-badge'),
-        );
-        FilamentView::registerRenderHook(
-            PanelsRenderHook::BODY_END,
-            fn () => view('demo-mode::provisioning-modal'),
-        );
     }
 }

@@ -11,7 +11,12 @@ use DemoMode\Models\DemoSetting;
 use DemoMode\Sandbox\Provisioner;
 use DemoMode\Sandbox\SandboxDrivers;
 use DemoMode\Sandbox\SandboxRef;
+use Filament\Facades\Filament;
+use Filament\Navigation\NavigationGroup;
+use Filament\Panel;
+use Filament\Support\Contracts\HasLabel;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -253,6 +258,102 @@ class DemoManager
         asort($options);
 
         return $options;
+    }
+
+    /**
+     * The selectable models grouped the way people find them in the panel: by the navigation group of
+     * the resource that manages the model, else by its sub-namespace (App\Models\Inventory\Item is
+     * "Inventory"), else "General". Groups follow the panel's navigation order, then the alphabet.
+     *
+     * @return array<string, array<class-string<Model>, string>>
+     */
+    public function modelGroups(): array
+    {
+        $callback = app(DemoModeOptions::class)->modelGroup;
+        $navigation = $this->resourceNavigationGroups();
+        $groups = [];
+        foreach ($this->modelOptions() as $class => $label) {
+            $group = $this->groupLabel($callback ? $callback($class) : null)
+                ?? $this->groupLabel($navigation[$class] ?? null)
+                ?? $this->namespaceGroup($class)
+                ?? 'General';
+            $groups[$group][$class] = $label;
+        }
+        $order = array_flip($this->panelGroupOrder());
+        uksort($groups, fn (string $a, string $b): int => [$a === 'General', $order[$a] ?? PHP_INT_MAX, $a]
+            <=> [$b === 'General', $order[$b] ?? PHP_INT_MAX, $b]);
+
+        return $groups;
+    }
+
+    /** @return array<class-string<Model>, string|\UnitEnum> Navigation group of each model's resource, demo panel first. */
+    private function resourceNavigationGroups(): array
+    {
+        $groups = [];
+        foreach ($this->panelsByPriority() as $panel) {
+            foreach ($panel->getResources() as $resource) {
+                try {
+                    $group = $resource::getNavigationGroup();
+                    $model = $resource::getModel();
+                } catch (\Throwable) {
+                    continue;
+                }
+                if ($group !== null && $group !== '' && ! isset($groups[$model])) {
+                    $groups[$model] = $group;
+                }
+            }
+        }
+
+        return $groups;
+    }
+
+    /** @return list<string> Navigation group labels in the order the demo panel declares them. */
+    private function panelGroupOrder(): array
+    {
+        $order = [];
+        foreach (($this->panelsByPriority()[0] ?? null)?->getNavigationGroups() ?? [] as $key => $group) {
+            $label = $group instanceof NavigationGroup
+                ? $this->groupLabel($group->getLabel()) ?? (is_string($key) ? $key : null)
+                : $this->groupLabel($group);
+            if ($label !== null) {
+                $order[] = $label;
+            }
+        }
+
+        return $order;
+    }
+
+    /** @return list<Panel> */
+    private function panelsByPriority(): array
+    {
+        $panels = Filament::getPanels();
+        $main = $panels[config('demo-mode.panel')] ?? null;
+
+        return array_values(array_filter([$main, ...array_filter($panels, fn ($panel) => $panel !== $main)]));
+    }
+
+    private function groupLabel(mixed $group): ?string
+    {
+        if ($group instanceof HasLabel) {
+            $group = $group->getLabel();
+        } elseif ($group instanceof \UnitEnum) {
+            $group = Str::headline($group->name);
+        }
+        if ($group instanceof Htmlable) {
+            $group = strip_tags($group->toHtml());
+        }
+
+        return is_string($group) && trim($group) !== '' ? trim($group) : null;
+    }
+
+    private function namespaceGroup(string $class): ?string
+    {
+        $namespace = (string) config('demo-mode.model_namespace');
+        if ($namespace === '' || ! Str::startsWith($class, $namespace) || ! str_contains(Str::after($class, $namespace), '\\')) {
+            return null;
+        }
+
+        return Str::headline(Str::before(Str::after($class, $namespace), '\\'));
     }
 
     public function directory(string $token): string

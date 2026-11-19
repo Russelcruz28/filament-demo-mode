@@ -19,4 +19,6 @@ class DemoModeOptions
     public ?Closure $exit = null;
 
     public ?Closure $demoUser = null;
+
+    public ?Closure $modelGroup = null;
 }

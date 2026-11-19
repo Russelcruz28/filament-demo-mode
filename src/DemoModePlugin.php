@@ -7,6 +7,7 @@ use DemoMode\Http\DemoMiddleware;
 use DemoMode\Resources\DemoSettingResource;
 use Filament\Contracts\Plugin;
 use Filament\Panel;
+use Filament\View\PanelsRenderHook;
 
 class DemoModePlugin implements Plugin
 {
@@ -43,7 +44,11 @@ class DemoModePlugin implements Plugin
                 app(DemoModeOptions::class)->{$name} = $callback;
             }
         }
-        $panel->middleware([DemoMiddleware::class], isPersistent: true);
+        // Demo mode, including its banner, badge and progress modal, is limited to panels that register the plugin.
+        $panel->middleware([DemoMiddleware::class], isPersistent: true)
+            ->renderHook(PanelsRenderHook::BODY_START, fn () => view('demo-mode::banner'))
+            ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, fn () => view('demo-mode::topbar-badge'))
+            ->renderHook(PanelsRenderHook::BODY_END, fn () => view('demo-mode::provisioning-modal'));
     }
 
     public function management(bool $enabled = true): static
@@ -112,6 +117,17 @@ class DemoModePlugin implements Plugin
     public function demoUsersUsing(Closure $callback): static
     {
         $this->callbacks['demoUser'] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Group the models offered under "Starting data". Return a label (or enum) for a model class,
+     * or null to fall back to its resource's navigation group.
+     */
+    public function groupModelsUsing(Closure $callback): static
+    {
+        $this->callbacks['modelGroup'] = $callback;
 
         return $this;
     }
