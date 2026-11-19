@@ -11,11 +11,15 @@ use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 class DemoSettingResource extends Resource
 {
@@ -61,23 +65,86 @@ class DemoSettingResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            CheckboxList::make('models')->label('Copy starting data from')
-                ->options(fn () => app(DemoManager::class)->modelOptions())
-                // Drop saved models that are no longer offered (e.g. their table was excluded) so the form still saves.
-                ->afterStateHydrated(fn (CheckboxList $component, ?array $state) => $component->state(
-                    array_values(array_intersect($state ?? [], array_keys(app(DemoManager::class)->modelOptions())))
-                ))
-                ->searchable()->bulkToggleable()->columns(3)->columnSpanFull(),
-            Select::make('users')->label('Demo users')
-                ->helperText('These users always sign in to the saved demo. They never see production data and cannot switch roles, reset or exit the demo. Users who can manage Demo Mode are never affected. Users created after the demo was prepared need a demo reset.')
-                ->multiple()->searchable()
-                ->getSearchResultsUsing(fn (string $search): array => static::searchUsers($search))
-                ->getOptionLabelsUsing(fn (array $values): array => static::userLabels($values))
-                // Stored as strings so integer, UUID and ULID keys compare the same way.
-                ->dehydrateStateUsing(fn (?array $state): array => array_values(array_map('strval', $state ?? [])))
+            Section::make('Starting data')->icon('heroicon-o-circle-stack')
+                ->description('Choose the records copied into each new demo, grouped as they appear in the panel navigation. Records they depend on are copied automatically.')
+                ->schema(static::modelGroupFields())
+                ->columnSpanFull(),
+            Section::make('Demo users')->icon('heroicon-o-user-group')
+                ->description('These users always sign in to the saved demo. They never see production data and cannot switch roles, reset or exit the demo. Users who can manage Demo Mode are never affected. Users created after the demo was prepared need a demo reset.')
+                ->schema([
+                    Select::make('users')->label('Demo users')->hiddenLabel()
+                        ->placeholder('Search users to tag')
+                        ->multiple()->searchable()
+                        ->getSearchResultsUsing(fn (string $search): array => static::searchUsers($search))
+                        ->getOptionLabelsUsing(fn (array $values): array => static::userLabels($values))
+                        // Stored as strings so integer, UUID and ULID keys compare the same way.
+                        ->dehydrateStateUsing(fn (?array $state): array => array_values(array_map('strval', $state ?? []))),
+                ])
                 ->visible(fn (): bool => (bool) config('demo-mode.demo_users.enabled', true))
                 ->columnSpanFull(),
         ]);
+    }
+
+    /** @return array<Component> One collapsible checklist per model group, stored under `model_groups.<key>`. */
+    protected static function modelGroupFields(): array
+    {
+        $fields = [];
+        foreach (static::modelGroups() as $key => $group) {
+            $count = count($group['options']);
+            $fields[] = Section::make($group['label'])
+                ->description($count === 1 ? '1 model' : "{$count} models")
+                ->compact()->collapsible()
+                ->schema([
+                    CheckboxList::make("model_groups.{$key}")->label($group['label'])->hiddenLabel()
+                        ->options($group['options'])
+                        ->descriptions($group['tables'])
+                        ->bulkToggleable()
+                        ->searchable($count > 9)
+                        ->columns(['sm' => 2, 'xl' => 3])->gridDirection('row'),
+                ]);
+        }
+
+        return $fields !== [] ? $fields : [Text::make('No models are available. Check the models, model_path and excluded_tables settings in config/demo-mode.php.')];
+    }
+
+    /**
+     * Selectable models grouped for the form, keyed by a state-safe group key.
+     *
+     * @return array<string, array{label: string, options: array<class-string<Model>, string>, tables: array<class-string<Model>, string>}>
+     */
+    public static function modelGroups(): array
+    {
+        $groups = [];
+        foreach (app(DemoManager::class)->modelGroups() as $label => $options) {
+            $key = Str::slug($label, '_') ?: 'group';
+            $key = isset($groups[$key]) ? $key.'_'.count($groups) : $key;
+            $tables = [];
+            foreach (array_keys($options) as $class) {
+                $tables[$class] = (new $class)->getTable();
+            }
+            $groups[$key] = ['label' => $label, 'options' => $options, 'tables' => $tables];
+        }
+
+        return $groups;
+    }
+
+    /**
+     * Split the saved model list into the form's groups. Models that are no longer offered (e.g. their
+     * table was excluded) are dropped so the form still saves.
+     *
+     * @return array<string, list<class-string<Model>>>
+     */
+    public static function groupModelSelection(?array $models): array
+    {
+        return array_map(fn (array $group): array => array_values(array_intersect($models ?? [], array_keys($group['options']))),
+            static::modelGroups());
+    }
+
+    /** @return list<class-string<Model>> */
+    public static function flattenModelSelection(?array $groups): array
+    {
+        return array_values(array_unique(array_merge([], ...array_map(fn ($selected): array => array_values((array) $selected),
+            array_values($groups ?? [])))));
     }
 
     /** @return class-string<Model> */
